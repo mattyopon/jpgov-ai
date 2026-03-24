@@ -1072,15 +1072,104 @@
 
   document.querySelectorAll('.fade-in').forEach(el => observer.observe(el));
 
-  // Signup form
+  // =====================================================
+  // 早期アクセス登録フォーム
+  // =====================================================
+  //
+  // 【本番環境への切り替え方法】
+  //
+  // ── 方式A: Formspree.io（推奨・月50件まで無料）──────────
+  //   1. https://formspree.io にアクセスしてアカウント作成
+  //   2. 新しいフォームを作成し、form_id を取得（例: "xpwzqabc"）
+  //   3. 下記の FORMSPREE_ID を取得したIDに書き換える
+  //   4. USE_FORMSPREE を true に変更する
+  //
+  // ── 方式B: Google Forms ─────────────────────────────────
+  //   1. Googleフォームでメールアドレス収集フォームを作成
+  //   2. 送信ボタンの「事前入力のURLを取得」でentry.XXXを確認
+  //   3. GOOGLE_FORM_URL と GOOGLE_ENTRY_ID を設定する
+  //
+  // ── 現在: localStorageデモモード ────────────────────────
+  //   - フォームデータをブラウザのlocalStorageに保存
+  //   - 本番前の動作確認・UI確認用プロトタイプ
+  // =====================================================
+
+  const USE_FORMSPREE = false;       // Formspree使用時は true に変更
+  const FORMSPREE_ID = 'YOUR_FORM_ID';  // Formspree の form_id に書き換え
+
   function handleSignup(e) {
     e.preventDefault();
-    const email = document.getElementById('email-input').value;
+
+    const emailInput = document.getElementById('email-input');
     const note = document.getElementById('signup-note');
-    // In production, this would call an API endpoint
-    note.textContent = `✓ ${email} を登録しました。準備ができ次第ご連絡します！`;
-    note.style.color = '#86efac';
-    document.getElementById('email-input').value = '';
+    const btn = e.target.querySelector('.btn-cta');
+    const email = emailInput.value.trim();
+
+    if (!email) return;
+
+    // ボタンを送信中に変更
+    btn.textContent = '送信中...';
+    btn.disabled = true;
+
+    if (USE_FORMSPREE) {
+      // ── 方式A: Formspree.io ──
+      fetch(`https://formspree.io/f/${FORMSPREE_ID}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ email: email, source: 'jpgov-ai-lp', registered_at: new Date().toISOString() })
+      })
+      .then(res => {
+        if (res.ok) {
+          showSuccess(emailInput, note, btn, email);
+        } else {
+          return res.json().then(data => { throw new Error(data.error || '送信エラー'); });
+        }
+      })
+      .catch(err => {
+        console.error('Formspree error:', err);
+        showError(note, btn);
+      });
+    } else {
+      // ── デモモード: localStorageに保存 ──
+      // 本番ではこのブロックを削除してください
+      const registrations = JSON.parse(localStorage.getItem('jpgov_registrations') || '[]');
+
+      // 重複チェック
+      if (registrations.some(r => r.email === email)) {
+        note.textContent = 'このメールアドレスはすでに登録済みです。';
+        note.style.color = '#fbbf24';
+        btn.textContent = '早期アクセスに登録 →';
+        btn.disabled = false;
+        return;
+      }
+
+      registrations.push({
+        email: email,
+        registered_at: new Date().toISOString(),
+        source: 'jpgov-ai-lp'
+      });
+      localStorage.setItem('jpgov_registrations', JSON.stringify(registrations));
+      console.log('[Demo] 登録済みリスト:', registrations);
+
+      // 少し待機してUXを演出
+      setTimeout(() => showSuccess(emailInput, note, btn, email), 600);
+    }
+  }
+
+  function showSuccess(emailInput, note, btn, email) {
+    emailInput.value = '';
+    btn.textContent = '登録完了 ✓';
+    btn.style.background = '#16a34a';
+    btn.disabled = true;
+    note.innerHTML = `<strong style="color:#86efac">✓ ${email} を登録しました。</strong><br>
+      <span style="color:#64748b">リリース時にご連絡します。しばらくお待ちください。</span>`;
+  }
+
+  function showError(note, btn) {
+    btn.textContent = '早期アクセスに登録 →';
+    btn.disabled = false;
+    note.textContent = '送信に失敗しました。時間をおいて再度お試しください。';
+    note.style.color = '#f87171';
   }
 </script>
 </body>
