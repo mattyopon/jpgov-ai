@@ -1,9 +1,9 @@
 # Copyright (c) 2026 Yutaro Maeda
-# Licensed under the MIT License. See LICENSE file for details.
+# Licensed under the Business Source License 1.1. See LICENSE file for details.
 
 """レポート生成サービス.
 
-AI Governance Mark申請用の自己評価レポートをAI生成し、PDF出力する。
+ISO 42001認証準備・AIガバナンス成熟度評価レポートをAI生成し、PDF出力する。
 """
 
 from __future__ import annotations
@@ -114,7 +114,7 @@ async def generate_report(
         f"Date: {datetime.now(timezone.utc).strftime('%Y-%m-%d')}"
     )
     pdf._add_text(
-        "Based on: METI AI Guidelines for Business (v1.0, April 2024)"
+        "Based on: METI AI Guidelines for Business (v1.1, March 2025)"
     )
     pdf.ln(5)
 

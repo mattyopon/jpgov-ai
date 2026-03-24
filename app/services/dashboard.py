@@ -1,5 +1,5 @@
 # Copyright (c) 2026 Yutaro Maeda
-# Licensed under the MIT License. See LICENSE file for details.
+# Licensed under the Business Source License 1.1. See LICENSE file for details.
 
 """マルチ規制ダッシュボードサービス.
 
@@ -72,7 +72,7 @@ def _calc_meti_status(gap_result: GapAnalysisResult) -> RegulationStatus:
     overall = sum(scores) / len(scores) if scores else 0.0
 
     return RegulationStatus(
-        regulation_name="METI AI事業者ガイドライン v1.0",
+        regulation_name="METI AI事業者ガイドライン v1.1",
         total_requirements=total,
         compliant_count=gap_result.compliant_count,
         partial_count=gap_result.partial_count,

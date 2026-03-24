@@ -1,5 +1,5 @@
 # Copyright (c) 2026 Yutaro Maeda
-# Licensed under the MIT License. See LICENSE file for details.
+# Licensed under the Business Source License 1.1. See LICENSE file for details.
 
 """ISO/IEC 42001:2023 (AIMS) 要求事項定義.
 

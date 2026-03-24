@@ -1,7 +1,7 @@
 # Copyright (c) 2026 Yutaro Maeda
-# Licensed under the MIT License. See LICENSE file for details.
+# Licensed under the Business Source License 1.1. See LICENSE file for details.
 
-"""Streamlit UI for JPGovAI - AI Governance Mark取得支援.
+"""Streamlit UI for JPGovAI - ISO 42001認証準備 & AIガバナンス管理.
 
 使い方:
     streamlit run ui/streamlit_app.py
@@ -74,7 +74,7 @@ page = st.sidebar.radio(
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("対応規制:")
-st.sidebar.markdown("- METI AI事業者ガイドライン v1.0")
+st.sidebar.markdown("- METI AI事業者ガイドライン v1.1")
 st.sidebar.markdown("- ISO/IEC 42001:2023 (AIMS)")
 st.sidebar.markdown("- AI推進法（2025年施行）")
 st.sidebar.markdown("Version 0.2.0")
@@ -657,7 +657,7 @@ elif page == "エビデンス管理":
 
 elif page == "レポート生成":
     st.title("レポート生成")
-    st.markdown("AI Governance Mark申請用の自己評価レポートを自動生成します。")
+    st.markdown("ISO 42001認証準備・AIガバナンス成熟度評価レポートを自動生成します。")
 
     if not st.session_state.assessment_id or not st.session_state.gap_id:
         st.warning("先に「自己診断」と「ギャップ分析」を実行してください。")

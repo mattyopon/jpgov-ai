@@ -1,5 +1,5 @@
 # Copyright (c) 2026 Yutaro Maeda
-# Licensed under the MIT License. See LICENSE file for details.
+# Licensed under the Business Source License 1.1. See LICENSE file for details.
 
 """エクスポートサービス.
 
@@ -214,7 +214,7 @@ def generate_meti_report_package(
         "",
         f"**組織名**: {organization_name or assessment.organization_id}",
         f"**報告日**: {datetime.now(timezone.utc).strftime('%Y年%m月%d日')}",
-        "**対象ガイドライン**: AI事業者ガイドライン（第1.0版）",
+        "**対象ガイドライン**: AI事業者ガイドライン（第1.1版）",
         "",
         "## 総合評価",
         f"- 総合スコア: {assessment.overall_score:.2f} / 4.00",
