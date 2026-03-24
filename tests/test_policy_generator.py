@@ -1,5 +1,5 @@
 # Copyright (c) 2026 Yutaro Maeda
-# Licensed under the MIT License. See LICENSE file for details.
+# Licensed under the Business Source License 1.1. See LICENSE file for details.
 
 """Tests for the policy generator service."""
 
@@ -20,13 +20,18 @@ class TestPolicyGenerator:
 
     def test_available_types(self):
         types = get_available_policy_types()
-        assert len(types) == 5
+        assert len(types) == 10
         type_values = {t["type"] for t in types}
         assert "ai_usage" in type_values
         assert "risk_management" in type_values
         assert "ethics" in type_values
         assert "data_management" in type_values
         assert "incident_response" in type_values
+        assert "vendor_management" in type_values
+        assert "model_management" in type_values
+        assert "transparency" in type_values
+        assert "fairness" in type_values
+        assert "audit" in type_values
 
     def test_generate_ai_usage(self):
         doc = generate_policy(PolicyType.AI_USAGE, "Test Corp", "org-001")
@@ -54,10 +59,15 @@ class TestPolicyGenerator:
 
     def test_generate_all(self):
         docs = generate_all_policies("Test Corp", "org-001")
-        assert len(docs) == 5
+        assert len(docs) == 10
         titles = {d.title for d in docs}
         assert "AI利用ポリシー" in titles
         assert "AIリスク管理方針" in titles
+        assert "AI調達・ベンダー管理方針" in titles
+        assert "AIモデル管理方針" in titles
+        assert "AI透明性方針" in titles
+        assert "AI公平性方針" in titles
+        assert "AI監査方針" in titles
 
     def test_full_text_has_sections(self):
         doc = generate_policy(PolicyType.AI_USAGE, "Sample Inc")

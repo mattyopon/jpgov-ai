@@ -1,5 +1,5 @@
 # Copyright (c) 2026 Yutaro Maeda
-# Licensed under the MIT License. See LICENSE file for details.
+# Licensed under the Business Source License 1.1. See LICENSE file for details.
 
 """Pydantic models for JPGovAI API."""
 
@@ -73,6 +73,11 @@ class PolicyType(str, Enum):
     ETHICS = "ethics"
     DATA_MANAGEMENT = "data_management"
     INCIDENT_RESPONSE = "incident_response"
+    VENDOR_MANAGEMENT = "vendor_management"
+    MODEL_MANAGEMENT = "model_management"
+    TRANSPARENCY = "transparency"
+    FAIRNESS = "fairness"
+    AUDIT = "audit"
 
 
 class ExportFormat(str, Enum):

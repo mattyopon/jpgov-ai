@@ -1,5 +1,5 @@
 # Copyright (c) 2026 Yutaro Maeda
-# Licensed under the MIT License. See LICENSE file for details.
+# Licensed under the Business Source License 1.1. See LICENSE file for details.
 
 """ギャップ分析サービス.
 
@@ -342,3 +342,148 @@ def get_gap_analysis(gap_id: str) -> GapAnalysisResult | None:
         if row is None:
             return None
         return GapAnalysisResult.model_validate_json(row.result_json)
+
+
+# ---------------------------------------------------------------------------
+# マルチフレームワーク ギャップ分析
+# ---------------------------------------------------------------------------
+
+def _framework_priority(framework: str) -> int:
+    """フレームワークの優先度を返す（値が小さいほど高優先）.
+
+    法的義務（EU AI Act / AI推進法 mandatory）> 認証要件（ISO 42001）
+    > ガイドライン（METI）> 推奨（NIST）
+    """
+    priorities = {
+        "eu_ai_act": 1,
+        "ai_promotion_act_mandatory": 2,
+        "iso42001": 3,
+        "meti": 4,
+        "ai_promotion_act_effort": 5,
+        "nist": 6,
+        "industry": 7,
+    }
+    return priorities.get(framework, 99)
+
+
+def run_multi_framework_gap_analysis(
+    gap_result: GapAnalysisResult,
+    *,
+    industry: str = "",
+    include_nist: bool = True,
+    include_eu: bool = True,
+    include_industry: bool = True,
+) -> list[dict]:
+    """マルチフレームワーク対応のギャップ分析を実行.
+
+    METIギャップ分析結果を基に、各Gapに「どのフレームワークの何条に
+    違反しているか」を明示する。
+
+    優先順位ロジック:
+    法的義務（EU AI Act）> 認証要件（ISO 42001）> ガイドライン（METI）> 推奨（NIST）
+
+    Args:
+        gap_result: METIギャップ分析結果
+        industry: 業種（"financial", "healthcare", "automotive", "hr"）
+        include_nist: NIST AI RMFを含めるか
+        include_eu: EU AI Actを含めるか
+        include_industry: 業種別ガイドラインを含めるか
+
+    Returns:
+        各ギャップに対するマルチフレームワーク分析結果のリスト
+    """
+    from app.guidelines.cross_mapping import get_frameworks_for_meti_requirement
+    from app.guidelines.industry_specific import get_industry_to_meti_mapping
+
+    results: list[dict] = []
+
+    # 業種別マッピングの逆引き（METI → 業種別要件）
+    industry_reverse_map: dict[str, list[str]] = {}
+    if include_industry and industry:
+        industry_mapping = get_industry_to_meti_mapping(industry)
+        for ind_id, meti_ids in industry_mapping.items():
+            for mid in meti_ids:
+                industry_reverse_map.setdefault(mid, []).append(ind_id)
+
+    for gap in gap_result.gaps:
+        if gap.status == ComplianceStatus.COMPLIANT:
+            continue
+
+        frameworks = get_frameworks_for_meti_requirement(gap.req_id)
+
+        violations: list[dict] = []
+
+        # METI
+        violations.append({
+            "framework": "meti",
+            "framework_name": "METI AI事業者ガイドライン",
+            "requirement_ids": [gap.req_id],
+            "priority": _framework_priority("meti"),
+        })
+
+        # ISO 42001
+        if frameworks["iso"]:
+            violations.append({
+                "framework": "iso42001",
+                "framework_name": "ISO/IEC 42001:2023",
+                "requirement_ids": frameworks["iso"],
+                "priority": _framework_priority("iso42001"),
+            })
+
+        # NIST AI RMF
+        if include_nist and frameworks["nist"]:
+            violations.append({
+                "framework": "nist",
+                "framework_name": "NIST AI RMF 1.0",
+                "requirement_ids": frameworks["nist"],
+                "priority": _framework_priority("nist"),
+            })
+
+        # EU AI Act
+        if include_eu and frameworks["eu_articles"]:
+            violations.append({
+                "framework": "eu_ai_act",
+                "framework_name": "EU AI Act",
+                "requirement_ids": frameworks["eu_articles"],
+                "priority": _framework_priority("eu_ai_act"),
+            })
+
+        # AI推進法
+        if frameworks["act"]:
+            violations.append({
+                "framework": "ai_promotion_act",
+                "framework_name": "AI推進法",
+                "requirement_ids": frameworks["act"],
+                "priority": _framework_priority("ai_promotion_act_mandatory"),
+            })
+
+        # 業種別
+        if include_industry and gap.req_id in industry_reverse_map:
+            violations.append({
+                "framework": "industry",
+                "framework_name": f"業種別ガイドライン（{industry}）",
+                "requirement_ids": industry_reverse_map[gap.req_id],
+                "priority": _framework_priority("industry"),
+            })
+
+        # 優先順位でソート
+        violations.sort(key=lambda v: v["priority"])
+
+        # 最高優先度のフレームワークを取得
+        highest_priority_framework = violations[0]["framework_name"] if violations else "METI"
+
+        results.append({
+            "req_id": gap.req_id,
+            "title": gap.title,
+            "status": gap.status.value,
+            "current_score": gap.current_score,
+            "priority": gap.priority,
+            "highest_priority_framework": highest_priority_framework,
+            "violations": violations,
+            "improvement_actions": gap.improvement_actions,
+        })
+
+    # 全体を最高優先度フレームワークでソート（法的義務が上に来る）
+    results.sort(key=lambda r: min(v["priority"] for v in r["violations"]) if r["violations"] else 99)
+
+    return results
