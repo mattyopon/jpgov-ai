@@ -1,5 +1,5 @@
 # Copyright (c) 2026 Yutaro Maeda
-# Licensed under the MIT License. See LICENSE file for details.
+# Licensed under the Business Source License 1.1. See LICENSE file for details.
 
 """FastAPI application for JPGovAI."""
 
@@ -8,8 +8,18 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 
+from app.auth import (
+    AuthResponse,
+    LoginRequest,
+    RegisterRequest,
+    TokenPayload,
+    authenticate_user,
+    create_token,
+    get_current_user,
+    register_user,
+)
 from app.db.database import OrganizationRow, get_db
 from app.guidelines.ai_promotion_act import ACT_CHAPTERS, all_act_requirements
 from app.guidelines.iso42001 import ISO_CLAUSES, all_iso_requirements, get_meti_to_iso_mapping
@@ -71,7 +81,7 @@ from app.services.task_manager import (
 
 app = FastAPI(
     title="JPGovAI",
-    description="AI Governance Mark取得支援SaaS - METI AI事業者ガイドライン / ISO 42001 / AI推進法 準拠",
+    description="ISO 42001認証準備 & AIガバナンス管理 SaaS - METI AI事業者ガイドライン v1.1 / ISO 42001 / AI推進法 準拠",
     version="0.2.0",
 )
 
@@ -84,10 +94,41 @@ def startup() -> None:
     get_db()
 
 
+# ── Auth ─────────────────────────────────────────────────────────
+
+@app.post("/api/auth/register", response_model=AuthResponse)
+def register(req: RegisterRequest) -> AuthResponse:
+    """ユーザー登録."""
+    user = register_user(req.email, req.password, req.display_name)
+    token = create_token(user["user_id"], user["email"])
+    return AuthResponse(
+        access_token=token,
+        user_id=user["user_id"],
+        email=user["email"],
+    )
+
+
+@app.post("/api/auth/login", response_model=AuthResponse)
+def login(req: LoginRequest) -> AuthResponse:
+    """ログイン."""
+    user = authenticate_user(req.email, req.password)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    token = create_token(user["user_id"], user["email"])
+    return AuthResponse(
+        access_token=token,
+        user_id=user["user_id"],
+        email=user["email"],
+    )
+
+
 # ── Organizations ─────────────────────────────────────────────────
 
 @app.post("/api/organizations", response_model=OrganizationResponse)
-def create_organization(org: OrganizationCreate) -> OrganizationResponse:
+def create_organization(
+    org: OrganizationCreate,
+    _user: TokenPayload = Depends(get_current_user),
+) -> OrganizationResponse:
     """組織を登録."""
     db = get_db()
     org_id = str(uuid.uuid4())
@@ -126,7 +167,9 @@ def create_organization(org: OrganizationCreate) -> OrganizationResponse:
 # ── Guidelines ────────────────────────────────────────────────────
 
 @app.get("/api/guidelines/categories")
-def get_categories() -> list[dict]:
+def get_categories(
+    _user: TokenPayload = Depends(get_current_user),
+) -> list[dict]:
     """ガイドラインカテゴリ一覧."""
     return [
         {
@@ -140,7 +183,9 @@ def get_categories() -> list[dict]:
 
 
 @app.get("/api/guidelines/requirements")
-def get_requirements() -> list[dict]:
+def get_requirements(
+    _user: TokenPayload = Depends(get_current_user),
+) -> list[dict]:
     """全要件一覧."""
     reqs = []
     for c in CATEGORIES:
@@ -158,7 +203,9 @@ def get_requirements() -> list[dict]:
 
 
 @app.get("/api/guidelines/questions")
-def get_questions() -> list[dict]:
+def get_questions(
+    _user: TokenPayload = Depends(get_current_user),
+) -> list[dict]:
     """質問票一覧."""
     return [
         {
@@ -174,7 +221,9 @@ def get_questions() -> list[dict]:
 # ── ISO 42001 Guidelines ────────────────────────────────────────
 
 @app.get("/api/guidelines/iso42001/clauses")
-def get_iso_clauses() -> list[dict]:
+def get_iso_clauses(
+    _user: TokenPayload = Depends(get_current_user),
+) -> list[dict]:
     """ISO 42001条項一覧."""
     return [
         {
@@ -188,7 +237,9 @@ def get_iso_clauses() -> list[dict]:
 
 
 @app.get("/api/guidelines/iso42001/requirements")
-def get_iso_requirements() -> list[dict]:
+def get_iso_requirements(
+    _user: TokenPayload = Depends(get_current_user),
+) -> list[dict]:
     """ISO 42001全要求事項一覧."""
     return [
         {
@@ -203,7 +254,9 @@ def get_iso_requirements() -> list[dict]:
 
 
 @app.get("/api/guidelines/iso42001/cross-mapping")
-def get_cross_mapping() -> dict:
+def get_cross_mapping(
+    _user: TokenPayload = Depends(get_current_user),
+) -> dict:
     """METI <-> ISO 42001 クロスマッピング."""
     return get_meti_to_iso_mapping()
 
@@ -211,7 +264,9 @@ def get_cross_mapping() -> dict:
 # ── AI推進法 Guidelines ──────────────────────────────────────────
 
 @app.get("/api/guidelines/ai-promotion-act/chapters")
-def get_act_chapters() -> list[dict]:
+def get_act_chapters(
+    _user: TokenPayload = Depends(get_current_user),
+) -> list[dict]:
     """AI推進法 章一覧."""
     return [
         {
@@ -225,7 +280,9 @@ def get_act_chapters() -> list[dict]:
 
 
 @app.get("/api/guidelines/ai-promotion-act/requirements")
-def get_act_requirements() -> list[dict]:
+def get_act_requirements(
+    _user: TokenPayload = Depends(get_current_user),
+) -> list[dict]:
     """AI推進法 全要件一覧."""
     return [
         {
@@ -244,7 +301,10 @@ def get_act_requirements() -> list[dict]:
 # ── Assessment ────────────────────────────────────────────────────
 
 @app.post("/api/assessment", response_model=AssessmentResult)
-def submit_assessment(req: AssessmentRequest) -> AssessmentResult:
+def submit_assessment(
+    req: AssessmentRequest,
+    _user: TokenPayload = Depends(get_current_user),
+) -> AssessmentResult:
     """自己診断を実行."""
     result = run_assessment(req.organization_id, req.answers)
 
@@ -264,7 +324,10 @@ def submit_assessment(req: AssessmentRequest) -> AssessmentResult:
 
 
 @app.get("/api/assessment/{assessment_id}", response_model=AssessmentResult)
-def get_assessment_by_id(assessment_id: str) -> AssessmentResult:
+def get_assessment_by_id(
+    assessment_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> AssessmentResult:
     """診断結果を取得."""
     result = get_assessment(assessment_id)
     if result is None:
@@ -275,7 +338,10 @@ def get_assessment_by_id(assessment_id: str) -> AssessmentResult:
 # ── Gap Analysis ──────────────────────────────────────────────────
 
 @app.post("/api/gap-analysis", response_model=GapAnalysisResult)
-async def submit_gap_analysis(assessment_id: str) -> GapAnalysisResult:
+async def submit_gap_analysis(
+    assessment_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> GapAnalysisResult:
     """ギャップ分析を実行."""
     assessment = get_assessment(assessment_id)
     if assessment is None:
@@ -300,7 +366,10 @@ async def submit_gap_analysis(assessment_id: str) -> GapAnalysisResult:
 
 
 @app.get("/api/gap-analysis/{gap_id}", response_model=GapAnalysisResult)
-def get_gap_analysis_by_id(gap_id: str) -> GapAnalysisResult:
+def get_gap_analysis_by_id(
+    gap_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> GapAnalysisResult:
     """ギャップ分析結果を取得."""
     result = get_gap_analysis(gap_id)
     if result is None:
@@ -311,7 +380,10 @@ def get_gap_analysis_by_id(gap_id: str) -> GapAnalysisResult:
 # ── ISO 42001 Check ──────────────────────────────────────────────
 
 @app.post("/api/iso-check", response_model=ISOCheckResult)
-def submit_iso_check(gap_analysis_id: str) -> ISOCheckResult:
+def submit_iso_check(
+    gap_analysis_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> ISOCheckResult:
     """ISO 42001準拠チェックを実行."""
     gap = get_gap_analysis(gap_analysis_id)
     if gap is None:
@@ -337,13 +409,18 @@ def submit_iso_check(gap_analysis_id: str) -> ISOCheckResult:
 # ── Risk Assessment ──────────────────────────────────────────────
 
 @app.get("/api/risk-assessment/questions")
-def get_risk_questions_api() -> list[dict]:
+def get_risk_questions_api(
+    _user: TokenPayload = Depends(get_current_user),
+) -> list[dict]:
     """リスク分類用の質問一覧."""
     return get_risk_questions()
 
 
 @app.post("/api/risk-assessment", response_model=RiskAssessmentResult)
-def submit_risk_assessment(req: RiskAssessmentRequest) -> RiskAssessmentResult:
+def submit_risk_assessment(
+    req: RiskAssessmentRequest,
+    _user: TokenPayload = Depends(get_current_user),
+) -> RiskAssessmentResult:
     """リスクアセスメントを実行."""
     result = run_risk_assessment(
         organization_id=req.organization_id,
@@ -367,7 +444,10 @@ def submit_risk_assessment(req: RiskAssessmentRequest) -> RiskAssessmentResult:
 
 
 @app.get("/api/risk-assessment/{assessment_id}", response_model=RiskAssessmentResult)
-def get_risk_assessment_by_id(assessment_id: str) -> RiskAssessmentResult:
+def get_risk_assessment_by_id(
+    assessment_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> RiskAssessmentResult:
     """リスクアセスメント結果を取得."""
     result = get_risk_assessment(assessment_id)
     if result is None:
@@ -376,7 +456,10 @@ def get_risk_assessment_by_id(assessment_id: str) -> RiskAssessmentResult:
 
 
 @app.get("/api/risk-assessments/{organization_id}", response_model=list[RiskAssessmentResult])
-def get_risk_assessments(organization_id: str) -> list[RiskAssessmentResult]:
+def get_risk_assessments(
+    organization_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> list[RiskAssessmentResult]:
     """組織のリスクアセスメント一覧."""
     return list_risk_assessments(organization_id)
 
@@ -384,13 +467,19 @@ def get_risk_assessments(organization_id: str) -> list[RiskAssessmentResult]:
 # ── Task Management ──────────────────────────────────────────────
 
 @app.post("/api/tasks", response_model=ActionTask)
-def create_task_api(task_data: ActionTaskCreate) -> ActionTask:
+def create_task_api(
+    task_data: ActionTaskCreate,
+    _user: TokenPayload = Depends(get_current_user),
+) -> ActionTask:
     """改善タスクを作成."""
     return create_task(task_data)
 
 
 @app.get("/api/tasks/{task_id}", response_model=ActionTask)
-def get_task_api(task_id: str) -> ActionTask:
+def get_task_api(
+    task_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> ActionTask:
     """タスクを取得."""
     task = get_task(task_id)
     if task is None:
@@ -399,7 +488,11 @@ def get_task_api(task_id: str) -> ActionTask:
 
 
 @app.put("/api/tasks/{task_id}", response_model=ActionTask)
-def update_task_api(task_id: str, update: ActionTaskUpdate) -> ActionTask:
+def update_task_api(
+    task_id: str,
+    update: ActionTaskUpdate,
+    _user: TokenPayload = Depends(get_current_user),
+) -> ActionTask:
     """タスクを更新."""
     task = update_task(task_id, update)
     if task is None:
@@ -408,7 +501,11 @@ def update_task_api(task_id: str, update: ActionTaskUpdate) -> ActionTask:
 
 
 @app.get("/api/tasks/org/{organization_id}", response_model=list[ActionTask])
-def list_tasks_api(organization_id: str, status: str | None = None) -> list[ActionTask]:
+def list_tasks_api(
+    organization_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+    status: str | None = None,
+) -> list[ActionTask]:
     """組織のタスク一覧."""
     from app.models import TaskStatus as TS
     task_status = None
@@ -421,13 +518,20 @@ def list_tasks_api(organization_id: str, status: str | None = None) -> list[Acti
 
 
 @app.get("/api/tasks/board/{organization_id}", response_model=TaskBoardSummary)
-def get_board_api(organization_id: str) -> TaskBoardSummary:
+def get_board_api(
+    organization_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> TaskBoardSummary:
     """カンバンボードサマリーを取得."""
     return get_board_summary(organization_id)
 
 
 @app.post("/api/tasks/from-gap-analysis", response_model=list[ActionTask])
-def create_tasks_from_gap_api(organization_id: str, gap_analysis_id: str) -> list[ActionTask]:
+def create_tasks_from_gap_api(
+    organization_id: str,
+    gap_analysis_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> list[ActionTask]:
     """ギャップ分析結果から自動的にタスクを生成."""
     gap = get_gap_analysis(gap_analysis_id)
     if gap is None:
@@ -450,13 +554,18 @@ def create_tasks_from_gap_api(organization_id: str, gap_analysis_id: str) -> lis
 # ── Policy Generator ─────────────────────────────────────────────
 
 @app.get("/api/policies/types")
-def get_policy_types() -> list[dict]:
+def get_policy_types(
+    _user: TokenPayload = Depends(get_current_user),
+) -> list[dict]:
     """利用可能なポリシータイプ一覧."""
     return get_available_policy_types()
 
 
 @app.post("/api/policies/generate", response_model=PolicyDocument)
-def generate_policy_api(req: PolicyGenerateRequest) -> PolicyDocument:
+def generate_policy_api(
+    req: PolicyGenerateRequest,
+    _user: TokenPayload = Depends(get_current_user),
+) -> PolicyDocument:
     """ポリシーテンプレートを生成."""
     result = generate_policy(req.policy_type, req.organization_name, req.organization_id)
 
@@ -472,7 +581,11 @@ def generate_policy_api(req: PolicyGenerateRequest) -> PolicyDocument:
 
 
 @app.post("/api/policies/generate-all", response_model=list[PolicyDocument])
-def generate_all_policies_api(organization_id: str, organization_name: str) -> list[PolicyDocument]:
+def generate_all_policies_api(
+    organization_id: str,
+    organization_name: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> list[PolicyDocument]:
     """全ポリシーをまとめて生成."""
     return generate_all_policies(organization_name, organization_id)
 
@@ -480,7 +593,11 @@ def generate_all_policies_api(organization_id: str, organization_name: str) -> l
 # ── Multi-Regulation Dashboard ───────────────────────────────────
 
 @app.get("/api/dashboard/{organization_id}", response_model=MultiRegulationDashboard)
-def get_dashboard(organization_id: str, gap_analysis_id: str) -> MultiRegulationDashboard:
+def get_dashboard(
+    organization_id: str,
+    gap_analysis_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> MultiRegulationDashboard:
     """マルチ規制ダッシュボードを取得."""
     gap = get_gap_analysis(gap_analysis_id)
     if gap is None:
@@ -495,7 +612,11 @@ def get_dashboard(organization_id: str, gap_analysis_id: str) -> MultiRegulation
 # ── Export ────────────────────────────────────────────────────────
 
 @app.get("/api/export/assessment/{assessment_id}")
-def export_assessment_api(assessment_id: str, fmt: str = "json") -> dict:
+def export_assessment_api(
+    assessment_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+    fmt: str = "json",
+) -> dict:
     """Assessment結果をエクスポート."""
     assessment = get_assessment(assessment_id)
     if assessment is None:
@@ -507,7 +628,11 @@ def export_assessment_api(assessment_id: str, fmt: str = "json") -> dict:
 
 
 @app.get("/api/export/gap-analysis/{gap_id}")
-def export_gap_analysis_api(gap_id: str, fmt: str = "json") -> dict:
+def export_gap_analysis_api(
+    gap_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+    fmt: str = "json",
+) -> dict:
     """ギャップ分析結果をエクスポート."""
     gap = get_gap_analysis(gap_id)
     if gap is None:
@@ -522,6 +647,7 @@ def export_gap_analysis_api(gap_id: str, fmt: str = "json") -> dict:
 def export_iso_package(
     assessment_id: str,
     gap_analysis_id: str,
+    _user: TokenPayload = Depends(get_current_user),
     organization_name: str = "",
 ) -> ExportPackage:
     """ISO 42001認証申請用パッケージを生成."""
@@ -542,6 +668,7 @@ def export_iso_package(
 def export_meti_package(
     assessment_id: str,
     gap_analysis_id: str,
+    _user: TokenPayload = Depends(get_current_user),
     organization_name: str = "",
 ) -> ExportPackage:
     """METI報告用パッケージを生成."""
@@ -559,7 +686,10 @@ def export_meti_package(
 # ── Evidence ──────────────────────────────────────────────────────
 
 @app.post("/api/evidence", response_model=EvidenceRecord)
-def submit_evidence(evidence: EvidenceUpload) -> EvidenceRecord:
+def submit_evidence(
+    evidence: EvidenceUpload,
+    _user: TokenPayload = Depends(get_current_user),
+) -> EvidenceRecord:
     """エビデンスをアップロード."""
     record = upload_evidence(evidence)
 
@@ -578,13 +708,20 @@ def submit_evidence(evidence: EvidenceUpload) -> EvidenceRecord:
 
 
 @app.get("/api/evidence/{organization_id}", response_model=list[EvidenceRecord])
-def get_evidence(organization_id: str, requirement_id: str | None = None) -> list[EvidenceRecord]:
+def get_evidence(
+    organization_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+    requirement_id: str | None = None,
+) -> list[EvidenceRecord]:
     """エビデンス一覧を取得."""
     return list_evidence(organization_id, requirement_id)
 
 
 @app.get("/api/evidence-summary/{organization_id}", response_model=EvidenceSummary)
-def get_evidence_summary_api(organization_id: str) -> EvidenceSummary:
+def get_evidence_summary_api(
+    organization_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> EvidenceSummary:
     """エビデンス充足率サマリー."""
     return get_evidence_summary(organization_id)
 
@@ -592,7 +729,10 @@ def get_evidence_summary_api(organization_id: str) -> EvidenceSummary:
 # ── Report ────────────────────────────────────────────────────────
 
 @app.post("/api/report", response_model=ReportResponse)
-async def generate_report_api(req: ReportRequest) -> ReportResponse:
+async def generate_report_api(
+    req: ReportRequest,
+    _user: TokenPayload = Depends(get_current_user),
+) -> ReportResponse:
     """レポートを生成."""
     assessment = get_assessment(req.assessment_id)
     if assessment is None:
@@ -622,7 +762,11 @@ async def generate_report_api(req: ReportRequest) -> ReportResponse:
 # ── Audit Trail ───────────────────────────────────────────────────
 
 @app.get("/api/audit/events", response_model=list[AuditEventResponse])
-def get_audit_events(limit: int = 100, offset: int = 0) -> list[AuditEventResponse]:
+def get_audit_events(
+    _user: TokenPayload = Depends(get_current_user),
+    limit: int = 100,
+    offset: int = 0,
+) -> list[AuditEventResponse]:
     """監査イベント一覧."""
     ledger = get_audit_ledger()
     events = ledger.get_events(limit=limit, offset=offset)
@@ -644,7 +788,9 @@ def get_audit_events(limit: int = 100, offset: int = 0) -> list[AuditEventRespon
 
 
 @app.get("/api/audit/verify", response_model=AuditChainStatus)
-def verify_audit_chain() -> AuditChainStatus:
+def verify_audit_chain(
+    _user: TokenPayload = Depends(get_current_user),
+) -> AuditChainStatus:
     """監査チェーンの整合性を検証."""
     ledger = get_audit_ledger()
     return ledger.get_status()
