@@ -7,7 +7,7 @@
   <meta name="description" content="METI AI事業者ガイドライン・ISO 42001・AI推進法に一元対応。コンサル費500万円を不要にするAIガバナンスSaaS。10分で成熟度診断。">
   <meta name="keywords" content="AIガバナンス, AI事業者ガイドライン, ISO 42001, AI推進法, METI, AIガバナンスマーク">
 
-  <!-- OGP -->
+  <!-- OGP (日本語固定 — JSで切替不可) -->
   <meta property="og:title" content="JPGovAI — AIガバナンス対応を、月額29,800円で">
   <meta property="og:description" content="METI AI事業者ガイドライン・ISO 42001・AI推進法に一元対応。10分で診断完了。">
   <meta property="og:type" content="website">
@@ -131,6 +131,45 @@
       text-decoration: none; letter-spacing: -.5px;
     }
     .nav-logo span { color: var(--slate-800); }
+    .nav-right {
+      display: flex; align-items: center; gap: 12px;
+    }
+
+    /* ===== LANGUAGE SWITCHER ===== */
+    .lang-switcher {
+      display: flex; align-items: center; gap: 4px;
+      background: var(--slate-100);
+      border-radius: 100px;
+      padding: 3px;
+    }
+    .lang-btn {
+      display: flex; align-items: center; gap: 5px;
+      padding: 5px 10px; border-radius: 100px;
+      font-size: 12px; font-weight: 600;
+      border: none; cursor: pointer;
+      background: transparent;
+      color: var(--slate-500);
+      transition: background .2s, color .2s, transform .15s;
+      white-space: nowrap;
+      font-family: inherit;
+    }
+    .lang-btn:hover { color: var(--slate-700); }
+    .lang-btn.active {
+      background: var(--white);
+      color: var(--blue-700);
+      box-shadow: 0 1px 4px rgba(0,0,0,.12);
+    }
+    .lang-btn .lang-flag { font-size: 15px; }
+    @media (prefers-color-scheme: dark) {
+      .lang-switcher { background: #334155; }
+      .lang-btn.active { background: #475569; color: #93c5fd; }
+      .lang-btn { color: #94a3b8; }
+    }
+    @media (max-width: 480px) {
+      .lang-btn .lang-label { display: none; }
+      .lang-btn { padding: 5px 7px; }
+    }
+
     .nav-cta {
       background: var(--blue-600); color: var(--white);
       padding: 8px 20px; border-radius: 8px;
@@ -557,7 +596,20 @@
 <nav class="nav" role="navigation" aria-label="メインナビゲーション">
   <div class="nav-inner">
     <a href="#" class="nav-logo">JPGov<span>AI</span></a>
-    <a href="#early-access" class="nav-cta">無料で診断する →</a>
+    <div class="nav-right">
+      <!-- 言語切替ボタン -->
+      <div class="lang-switcher" role="group" aria-label="Language">
+        <button class="lang-btn active" id="btn-ja" onclick="setLang('ja')" aria-label="日本語">
+          <span class="lang-flag">🇯🇵</span>
+          <span class="lang-label">日本語</span>
+        </button>
+        <button class="lang-btn" id="btn-en" onclick="setLang('en')" aria-label="English">
+          <span class="lang-flag">🇺🇸</span>
+          <span class="lang-label">English</span>
+        </button>
+      </div>
+      <a href="#early-access" class="nav-cta" data-i18n="nav.cta">無料で診断する →</a>
+    </div>
   </div>
 </nav>
 
@@ -566,21 +618,21 @@
   <div class="container hero-content">
     <div class="hero-badge">
       <span class="hero-badge-dot"></span>
-      2026年最新対応 — METI v1.1 / ISO 42001 / AI推進法
+      <span data-i18n="hero.badge">2026年最新対応 — METI v1.1 / ISO 42001 / AI推進法</span>
     </div>
-    <h1>AIガバナンス、まだ<br class="br-mobile"><span class="accent">コンサルに500万円</span>払いますか？</h1>
-    <p class="hero-sub">
+    <h1 data-i18n-html="hero.h1">AIガバナンス、まだ<br class="br-mobile"><span class="accent">コンサルに500万円</span>払いますか？</h1>
+    <p class="hero-sub" data-i18n-html="hero.sub">
       JPGovAIなら<strong>月額29,800円</strong>で、<strong>METI AI事業者ガイドライン・ISO 42001・AI推進法</strong>に対応。<br>
       診断から証拠収集・レポート提出まで、すべてをワンプラットフォームで。
     </p>
     <div class="hero-btns">
       <a href="#early-access" class="btn-primary">
-        <span>無料で診断する</span>
+        <span data-i18n="hero.cta.primary">無料で診断する</span>
         <span>→</span>
       </a>
-      <a href="#features" class="btn-secondary">機能を見る</a>
+      <a href="#features" class="btn-secondary" data-i18n="hero.cta.secondary">機能を見る</a>
     </div>
-    <p class="hero-note">クレジットカード不要・登録30秒</p>
+    <p class="hero-note" data-i18n="hero.note">クレジットカード不要・登録30秒</p>
   </div>
 </section>
 
@@ -590,18 +642,18 @@
     <div class="stats-grid">
       <div class="fade-in">
         <div class="stat-number">80<span style="font-size:.55em">〜95%</span></div>
-        <div class="stat-label">コスト削減</div>
-        <div class="stat-sub">コンサルティング費用比</div>
+        <div class="stat-label" data-i18n="stats.cost.label">コスト削減</div>
+        <div class="stat-sub" data-i18n="stats.cost.sub">コンサルティング費用比</div>
       </div>
       <div class="fade-in">
         <div class="stat-number">3</div>
-        <div class="stat-label">規制に一元対応</div>
-        <div class="stat-sub">METI + ISO 42001 + AI推進法</div>
+        <div class="stat-label" data-i18n="stats.unified.label">規制に一元対応</div>
+        <div class="stat-sub" data-i18n="stats.unified.sub">METI + ISO 42001 + AI推進法</div>
       </div>
       <div class="fade-in">
-        <div class="stat-number">10<span style="font-size:.45em; letter-spacing: -1px;">分</span></div>
-        <div class="stat-label">で診断完了</div>
-        <div class="stat-sub">25問の成熟度チェックリスト</div>
+        <div class="stat-number">10<span style="font-size:.45em; letter-spacing: -1px;" data-i18n="stats.time.unit">分</span></div>
+        <div class="stat-label" data-i18n="stats.time.label">で診断完了</div>
+        <div class="stat-sub" data-i18n="stats.time.sub">25問の成熟度チェックリスト</div>
       </div>
     </div>
   </div>
@@ -611,50 +663,50 @@
 <section class="problems-section" id="problems">
   <div class="container">
     <div class="fade-in">
-      <div class="section-label">課題</div>
-      <h2 class="section-title">AI事業者ガイドラインへの対応、<br>こんな状況ではありませんか？</h2>
+      <div class="section-label" data-i18n="problems.label">課題</div>
+      <h2 class="section-title" data-i18n-html="problems.title">AI事業者ガイドラインへの対応、<br>こんな状況ではありませんか？</h2>
     </div>
     <div class="problems-grid">
       <div class="problem-card fade-in">
         <div class="problem-icon">📃</div>
         <div>
-          <h3>ガイドラインが膨大すぎる</h3>
-          <p>METI AIガイドラインは100ページ超。ISO 42001も合わせると読み切れない量の要件が存在する。</p>
+          <h3 data-i18n="problems.p1.title">ガイドラインが膨大すぎる</h3>
+          <p data-i18n="problems.p1.desc">METI AIガイドラインは100ページ超。ISO 42001も合わせると読み切れない量の要件が存在する。</p>
         </div>
       </div>
       <div class="problem-card fade-in">
         <div class="problem-icon">🤷</div>
         <div>
-          <h3>何から始めればいいか分からない</h3>
-          <p>どの要件が自社に適用されるのか、何を優先すべきか、社内で判断できる人材がいない。</p>
+          <h3 data-i18n="problems.p2.title">何から始めればいいか分からない</h3>
+          <p data-i18n="problems.p2.desc">どの要件が自社に適用されるのか、何を優先すべきか、社内で判断できる人材がいない。</p>
         </div>
       </div>
       <div class="problem-card fade-in">
         <div class="problem-icon">💸</div>
         <div>
-          <h3>コンサルに頼むと高額</h3>
-          <p>専門コンサルへの依頼は初期費用100〜500万円+3〜6ヶ月のプロジェクト期間が標準的。</p>
+          <h3 data-i18n="problems.p3.title">コンサルに頼むと高額</h3>
+          <p data-i18n="problems.p3.desc">専門コンサルへの依頼は初期費用100〜500万円+3〜6ヶ月のプロジェクト期間が標準的。</p>
         </div>
       </div>
       <div class="problem-card fade-in">
         <div class="problem-icon">👤</div>
         <div>
-          <h3>社内に専門家がいない</h3>
-          <p>AIガバナンス専任担当がおらず、法務・IT・事業部門の誰が対応すべきかも不明確。</p>
+          <h3 data-i18n="problems.p4.title">社内に専門家がいない</h3>
+          <p data-i18n="problems.p4.desc">AIガバナンス専任担当がおらず、法務・IT・事業部門の誰が対応すべきかも不明確。</p>
         </div>
       </div>
       <div class="problem-card fade-in">
         <div class="problem-icon">📋</div>
         <div>
-          <h3>ISO 42001認証の準備が膨大</h3>
-          <p>27の要求事項に対する証拠書類の収集・整理・提出準備に数ヶ月かかる。どこから手をつければ？</p>
+          <h3 data-i18n="problems.p5.title">ISO 42001認証の準備が膨大</h3>
+          <p data-i18n="problems.p5.desc">27の要求事項に対する証拠書類の収集・整理・提出準備に数ヶ月かかる。どこから手をつければ？</p>
         </div>
       </div>
       <div class="problem-card fade-in">
         <div class="problem-icon">🔄</div>
         <div>
-          <h3>規制のアップデートに追いつけない</h3>
-          <p>AI推進法施行・METI改訂など規制は毎年変わる。最新動向を常にフォローし続けるのは負担が大きい。</p>
+          <h3 data-i18n="problems.p6.title">規制のアップデートに追いつけない</h3>
+          <p data-i18n="problems.p6.desc">AI推進法施行・METI改訂など規制は毎年変わる。最新動向を常にフォローし続けるのは負担が大きい。</p>
         </div>
       </div>
     </div>
@@ -665,82 +717,82 @@
 <section class="features-section" id="features">
   <div class="container">
     <div class="fade-in text-center">
-      <div class="section-label">機能</div>
-      <h2 class="section-title">AIガバナンス対応に必要なすべてが揃う</h2>
-      <p class="section-desc">診断から証拠収集、レポート提出まで。12の専門機能が連携して対応負担をゼロに近づけます。</p>
+      <div class="section-label" data-i18n="features.label">機能</div>
+      <h2 class="section-title" data-i18n="features.title">AIガバナンス対応に必要なすべてが揃う</h2>
+      <p class="section-desc" data-i18n="features.desc">診断から証拠収集、レポート提出まで。12の専門機能が連携して対応負担をゼロに近づけます。</p>
     </div>
     <div class="features-grid" style="margin-top: 48px;">
       <div class="card fade-in">
         <span class="card-icon">📋</span>
-        <h3>AI利用状況診断</h3>
-        <p>25問の体系的な質問で組織のAIガバナンス成熟度スコアを算出。現状把握から始められます。</p>
-        <span class="card-badge">全プラン利用可</span>
+        <h3 data-i18n="features.f1.title">AI利用状況診断</h3>
+        <p data-i18n="features.f1.desc">25問の体系的な質問で組織のAIガバナンス成熟度スコアを算出。現状把握から始められます。</p>
+        <span class="card-badge" data-i18n="features.badge.all">全プラン利用可</span>
       </div>
       <div class="card fade-in">
         <span class="card-icon">🔍</span>
-        <h3>ギャップ分析</h3>
-        <p>診断結果をもとに、各規制との差分をAIが自動分析。優先度付きで改善アクションを提案します。</p>
-        <span class="card-badge">Starter以上</span>
+        <h3 data-i18n="features.f2.title">ギャップ分析</h3>
+        <p data-i18n="features.f2.desc">診断結果をもとに、各規制との差分をAIが自動分析。優先度付きで改善アクションを提案します。</p>
+        <span class="card-badge" data-i18n="features.badge.starter">Starter以上</span>
       </div>
       <div class="card fade-in">
         <span class="card-icon">📎</span>
-        <h3>エビデンス管理</h3>
-        <p>証拠書類を規制要件にひもづけて一元管理。審査官が要求する形式で整理・検索できます。</p>
-        <span class="card-badge">Professional以上</span>
+        <h3 data-i18n="features.f3.title">エビデンス管理</h3>
+        <p data-i18n="features.f3.desc">証拠書類を規制要件にひもづけて一元管理。審査官が要求する形式で整理・検索できます。</p>
+        <span class="card-badge" data-i18n="features.badge.professional">Professional以上</span>
       </div>
       <div class="card fade-in">
         <span class="card-icon">📄</span>
-        <h3>レポート自動生成</h3>
-        <p>申請用PDFをワンクリックで出力。METI提出用・ISO審査用・社内報告用の3フォーマットに対応。</p>
-        <span class="card-badge">Professional以上</span>
+        <h3 data-i18n="features.f4.title">レポート自動生成</h3>
+        <p data-i18n="features.f4.desc">申請用PDFをワンクリックで出力。METI提出用・ISO審査用・社内報告用の3フォーマットに対応。</p>
+        <span class="card-badge" data-i18n="features.badge.professional">Professional以上</span>
       </div>
       <div class="card fade-in">
         <span class="card-icon">🔒</span>
-        <h3>改竄防止監査証跡</h3>
-        <p>すべての操作・エビデンスにSHA-256ハッシュチェーンを付与。第三者審査でも信頼される証跡を自動生成。</p>
-        <span class="card-badge">Professional以上</span>
+        <h3 data-i18n="features.f5.title">改竄防止監査証跡</h3>
+        <p data-i18n="features.f5.desc">すべての操作・エビデンスにSHA-256ハッシュチェーンを付与。第三者審査でも信頼される証跡を自動生成。</p>
+        <span class="card-badge" data-i18n="features.badge.professional">Professional以上</span>
       </div>
       <div class="card fade-in">
         <span class="card-icon">🌐</span>
-        <h3>ISO 42001対応</h3>
-        <p>27の要求事項を網羅したチェックリストと証拠テンプレート。認証取得への最短ルートをガイドします。</p>
-        <span class="card-badge">Enterprise</span>
+        <h3 data-i18n="features.f6.title">ISO 42001対応</h3>
+        <p data-i18n="features.f6.desc">27の要求事項を網羅したチェックリストと証拠テンプレート。認証取得への最短ルートをガイドします。</p>
+        <span class="card-badge" data-i18n="features.badge.enterprise">Enterprise</span>
       </div>
       <div class="card fade-in">
         <span class="card-icon">⚖️</span>
-        <h3>AI推進法対応</h3>
-        <p>2025年6月施行のAI推進法15要件に対応。義務・努力義務を区別して優先対応事項を明示します。</p>
-        <span class="card-badge">Enterprise</span>
+        <h3 data-i18n="features.f7.title">AI推進法対応</h3>
+        <p data-i18n="features.f7.desc">2025年6月施行のAI推進法15要件に対応。義務・努力義務を区別して優先対応事項を明示します。</p>
+        <span class="card-badge" data-i18n="features.badge.enterprise">Enterprise</span>
       </div>
       <div class="card fade-in">
         <span class="card-icon">📝</span>
-        <h3>ポリシーテンプレート自動生成</h3>
-        <p>AI利用ポリシー・リスク管理規程・インシデント対応手順など5種類の雛形をAIが自動カスタマイズ。</p>
-        <span class="card-badge">Starter以上</span>
+        <h3 data-i18n="features.f8.title">ポリシーテンプレート自動生成</h3>
+        <p data-i18n="features.f8.desc">AI利用ポリシー・リスク管理規程・インシデント対応手順など5種類の雛形をAIが自動カスタマイズ。</p>
+        <span class="card-badge" data-i18n="features.badge.starter">Starter以上</span>
       </div>
       <div class="card fade-in">
         <span class="card-icon">⚠️</span>
-        <h3>リスクアセスメント</h3>
-        <p>EU AI Act準拠の4段階リスク分類（禁止・高リスク・限定リスク・最小リスク）でAIシステムを評価。</p>
-        <span class="card-badge">Starter以上</span>
+        <h3 data-i18n="features.f9.title">リスクアセスメント</h3>
+        <p data-i18n="features.f9.desc">EU AI Act準拠の4段階リスク分類（禁止・高リスク・限定リスク・最小リスク）でAIシステムを評価。</p>
+        <span class="card-badge" data-i18n="features.badge.starter">Starter以上</span>
       </div>
       <div class="card fade-in">
         <span class="card-icon">✅</span>
-        <h3>タスク管理</h3>
-        <p>改善アクションをプロジェクト管理形式でトラッキング。担当者・期限・ステータスを一元管理。</p>
-        <span class="card-badge">Starter以上</span>
+        <h3 data-i18n="features.f10.title">タスク管理</h3>
+        <p data-i18n="features.f10.desc">改善アクションをプロジェクト管理形式でトラッキング。担当者・期限・ステータスを一元管理。</p>
+        <span class="card-badge" data-i18n="features.badge.starter">Starter以上</span>
       </div>
       <div class="card fade-in">
         <span class="card-icon">📊</span>
-        <h3>マルチ規制ダッシュボード</h3>
-        <p>METI・ISO 42001・AI推進法の対応状況を一画面で可視化。経営層への報告資料も自動生成。</p>
-        <span class="card-badge">Enterprise</span>
+        <h3 data-i18n="features.f11.title">マルチ規制ダッシュボード</h3>
+        <p data-i18n="features.f11.desc">METI・ISO 42001・AI推進法の対応状況を一画面で可視化。経営層への報告資料も自動生成。</p>
+        <span class="card-badge" data-i18n="features.badge.enterprise">Enterprise</span>
       </div>
       <div class="card fade-in">
         <span class="card-icon">💾</span>
-        <h3>エクスポート</h3>
-        <p>CSV/JSON/認証パッケージ形式でデータを出力。外部監査・社内システム連携に対応。</p>
-        <span class="card-badge">Enterprise</span>
+        <h3 data-i18n="features.f12.title">エクスポート</h3>
+        <p data-i18n="features.f12.desc">CSV/JSON/認証パッケージ形式でデータを出力。外部監査・社内システム連携に対応。</p>
+        <span class="card-badge" data-i18n="features.badge.enterprise">Enterprise</span>
       </div>
     </div>
   </div>
@@ -750,57 +802,57 @@
 <section class="compare-section" id="compare">
   <div class="container">
     <div class="fade-in text-center">
-      <div class="section-label">比較</div>
-      <h2 class="section-title">コンサルvsJPGovAI</h2>
-      <p class="section-desc">従来のコンサルティングと比べて、コスト・スピードともに圧倒的な違いがあります。</p>
+      <div class="section-label" data-i18n="compare.label">比較</div>
+      <h2 class="section-title" data-i18n="compare.title">コンサルvsJPGovAI</h2>
+      <p class="section-desc" data-i18n="compare.desc">従来のコンサルティングと比べて、コスト・スピードともに圧倒的な違いがあります。</p>
     </div>
     <div class="compare-wrapper fade-in">
       <table class="compare-table">
         <thead>
           <tr>
-            <th>項目</th>
-            <th>コンサルティング</th>
+            <th data-i18n="compare.th.item">項目</th>
+            <th data-i18n="compare.th.consultant">コンサルティング</th>
             <th>JPGovAI</th>
           </tr>
         </thead>
         <tbody>
           <tr>
-            <td>初期費用</td>
-            <td class="consultant-col">100〜500万円</td>
-            <td class="jpgov-col">0円</td>
+            <td data-i18n="compare.row1.label">初期費用</td>
+            <td class="consultant-col" data-i18n="compare.row1.consultant">100〜500万円</td>
+            <td class="jpgov-col" data-i18n="compare.row1.jpgov">0円</td>
           </tr>
           <tr>
-            <td>月額費用</td>
-            <td class="consultant-col">別途見積もり</td>
-            <td class="jpgov-col">29,800円〜</td>
+            <td data-i18n="compare.row2.label">月額費用</td>
+            <td class="consultant-col" data-i18n="compare.row2.consultant">別途見積もり</td>
+            <td class="jpgov-col" data-i18n="compare.row2.jpgov">29,800円〜</td>
           </tr>
           <tr>
-            <td>対応開始までの期間</td>
-            <td class="consultant-col">1〜2ヶ月</td>
-            <td class="jpgov-col">即日（登録30秒）</td>
+            <td data-i18n="compare.row3.label">対応開始までの期間</td>
+            <td class="consultant-col" data-i18n="compare.row3.consultant">1〜2ヶ月</td>
+            <td class="jpgov-col" data-i18n="compare.row3.jpgov">即日（登録30秒）</td>
           </tr>
           <tr>
-            <td>診断完了まで</td>
-            <td class="consultant-col">数週間</td>
-            <td class="jpgov-col">10分</td>
+            <td data-i18n="compare.row4.label">診断完了まで</td>
+            <td class="consultant-col" data-i18n="compare.row4.consultant">数週間</td>
+            <td class="jpgov-col" data-i18n="compare.row4.jpgov">10分</td>
           </tr>
           <tr>
-            <td>規制アップデート対応</td>
-            <td class="consultant-col">都度見積もり</td>
-            <td class="jpgov-col">自動アップデート（無料）</td>
+            <td data-i18n="compare.row5.label">規制アップデート対応</td>
+            <td class="consultant-col" data-i18n="compare.row5.consultant">都度見積もり</td>
+            <td class="jpgov-col" data-i18n="compare.row5.jpgov">自動アップデート（無料）</td>
           </tr>
           <tr>
-            <td>ISO 42001対応</td>
-            <td>△ 別途費用</td>
-            <td class="jpgov-col"><span class="check">✓</span> Enterpriseで対応</td>
+            <td data-i18n="compare.row6.label">ISO 42001対応</td>
+            <td data-i18n="compare.row6.consultant">△ 別途費用</td>
+            <td class="jpgov-col"><span class="check">✓</span> <span data-i18n="compare.row6.jpgov">Enterpriseで対応</span></td>
           </tr>
           <tr>
-            <td>24/7アクセス</td>
+            <td data-i18n="compare.row7.label">24/7アクセス</td>
             <td><span class="cross">✗</span></td>
             <td><span class="check">✓</span></td>
           </tr>
           <tr>
-            <td>監査証跡の自動生成</td>
+            <td data-i18n="compare.row8.label">監査証跡の自動生成</td>
             <td><span class="cross">✗</span></td>
             <td><span class="check">✓</span></td>
           </tr>
@@ -814,70 +866,70 @@
 <section class="pricing-section" id="pricing">
   <div class="container">
     <div class="fade-in text-center">
-      <div class="section-label">料金</div>
-      <h2 class="section-title">シンプルな料金体系</h2>
-      <p class="section-desc">無料プランから始めて、必要に応じてアップグレード。すべてのプランに30日間返金保証付き。</p>
+      <div class="section-label" data-i18n="pricing.label">料金</div>
+      <h2 class="section-title" data-i18n="pricing.title">シンプルな料金体系</h2>
+      <p class="section-desc" data-i18n="pricing.desc">無料プランから始めて、必要に応じてアップグレード。すべてのプランに30日間返金保証付き。</p>
     </div>
     <div class="pricing-grid">
       <!-- Free -->
       <div class="pricing-card fade-in">
         <div class="plan-name">Free</div>
-        <div class="plan-price">¥0<span class="plan-price-unit">/月</span></div>
-        <div class="plan-desc">まず試してみたい方に</div>
+        <div class="plan-price">¥0<span class="plan-price-unit" data-i18n="pricing.per_month">/月</span></div>
+        <div class="plan-desc" data-i18n="pricing.free.desc">まず試してみたい方に</div>
         <ul class="plan-features">
-          <li>AI利用状況診断（25問）</li>
-          <li>成熟度スコア算出</li>
-          <li>現状レポート（基本版）</li>
-          <li>メール通知</li>
+          <li data-i18n="pricing.free.f1">AI利用状況診断（25問）</li>
+          <li data-i18n="pricing.free.f2">成熟度スコア算出</li>
+          <li data-i18n="pricing.free.f3">現状レポート（基本版）</li>
+          <li data-i18n="pricing.free.f4">メール通知</li>
         </ul>
-        <a href="#early-access" class="btn-plan btn-plan-outline">無料で始める</a>
+        <a href="#early-access" class="btn-plan btn-plan-outline" data-i18n="pricing.free.cta">無料で始める</a>
       </div>
       <!-- Starter -->
       <div class="pricing-card fade-in">
         <div class="plan-name">Starter</div>
-        <div class="plan-price">¥29,800<span class="plan-price-unit">/月</span></div>
-        <div class="plan-desc">ガバナンス対応を始めたい企業に</div>
+        <div class="plan-price">¥29,800<span class="plan-price-unit" data-i18n="pricing.per_month">/月</span></div>
+        <div class="plan-desc" data-i18n="pricing.starter.desc">ガバナンス対応を始めたい企業に</div>
         <ul class="plan-features">
-          <li>Freeプランのすべて</li>
-          <li>ギャップ分析（AI自動提案）</li>
-          <li>ポリシーテンプレート5種</li>
-          <li>リスクアセスメント</li>
-          <li>タスク管理</li>
-          <li>メールサポート</li>
+          <li data-i18n="pricing.starter.f1">Freeプランのすべて</li>
+          <li data-i18n="pricing.starter.f2">ギャップ分析（AI自動提案）</li>
+          <li data-i18n="pricing.starter.f3">ポリシーテンプレート5種</li>
+          <li data-i18n="pricing.starter.f4">リスクアセスメント</li>
+          <li data-i18n="pricing.starter.f5">タスク管理</li>
+          <li data-i18n="pricing.starter.f6">メールサポート</li>
         </ul>
-        <a href="#early-access" class="btn-plan btn-plan-outline">Starterを選ぶ</a>
+        <a href="#early-access" class="btn-plan btn-plan-outline" data-i18n="pricing.starter.cta">Starterを選ぶ</a>
       </div>
       <!-- Professional (featured) -->
       <div class="pricing-card featured fade-in">
-        <div class="featured-badge">人気 No.1</div>
+        <div class="featured-badge" data-i18n="pricing.popular">人気 No.1</div>
         <div class="plan-name">Professional</div>
-        <div class="plan-price">¥59,800<span class="plan-price-unit">/月</span></div>
-        <div class="plan-desc">認証取得を目指す企業に</div>
+        <div class="plan-price">¥59,800<span class="plan-price-unit" data-i18n="pricing.per_month">/月</span></div>
+        <div class="plan-desc" data-i18n="pricing.professional.desc">認証取得を目指す企業に</div>
         <ul class="plan-features">
-          <li>Starterプランのすべて</li>
-          <li>エビデンス管理</li>
-          <li>レポート自動生成（PDF）</li>
-          <li>改竄防止監査証跡</li>
-          <li>チームメンバー5名</li>
-          <li>優先サポート</li>
+          <li data-i18n="pricing.professional.f1">Starterプランのすべて</li>
+          <li data-i18n="pricing.professional.f2">エビデンス管理</li>
+          <li data-i18n="pricing.professional.f3">レポート自動生成（PDF）</li>
+          <li data-i18n="pricing.professional.f4">改竄防止監査証跡</li>
+          <li data-i18n="pricing.professional.f5">チームメンバー5名</li>
+          <li data-i18n="pricing.professional.f6">優先サポート</li>
         </ul>
-        <a href="#early-access" class="btn-plan btn-plan-white">Professionalを選ぶ</a>
+        <a href="#early-access" class="btn-plan btn-plan-white" data-i18n="pricing.professional.cta">Professionalを選ぶ</a>
       </div>
       <!-- Enterprise -->
       <div class="pricing-card fade-in">
         <div class="plan-name">Enterprise</div>
-        <div class="plan-price">¥98,000<span class="plan-price-unit">/月</span></div>
-        <div class="plan-desc">ISO 42001認証を取得したい企業に</div>
+        <div class="plan-price">¥98,000<span class="plan-price-unit" data-i18n="pricing.per_month">/月</span></div>
+        <div class="plan-desc" data-i18n="pricing.enterprise.desc">ISO 42001認証を取得したい企業に</div>
         <ul class="plan-features">
-          <li>Professionalプランのすべて</li>
-          <li>ISO 42001全要求事項対応</li>
-          <li>AI推進法15要件対応</li>
-          <li>マルチ規制ダッシュボード</li>
-          <li>CSV/JSON/認証パッケージ出力</li>
-          <li>無制限メンバー</li>
-          <li>専任サポート担当</li>
+          <li data-i18n="pricing.enterprise.f1">Professionalプランのすべて</li>
+          <li data-i18n="pricing.enterprise.f2">ISO 42001全要求事項対応</li>
+          <li data-i18n="pricing.enterprise.f3">AI推進法15要件対応</li>
+          <li data-i18n="pricing.enterprise.f4">マルチ規制ダッシュボード</li>
+          <li data-i18n="pricing.enterprise.f5">CSV/JSON/認証パッケージ出力</li>
+          <li data-i18n="pricing.enterprise.f6">無制限メンバー</li>
+          <li data-i18n="pricing.enterprise.f7">専任サポート担当</li>
         </ul>
-        <a href="#early-access" class="btn-plan btn-plan-outline">Enterpriseを選ぶ</a>
+        <a href="#early-access" class="btn-plan btn-plan-outline" data-i18n="pricing.enterprise.cta">Enterpriseを選ぶ</a>
       </div>
     </div>
   </div>
@@ -887,43 +939,43 @@
 <section class="compliance-section" id="compliance">
   <div class="container">
     <div class="fade-in text-center">
-      <div class="section-label">対応規制</div>
-      <h2 class="section-title">主要3規制に完全対応</h2>
-      <p class="section-desc">日本で事業を行うAI企業が対応すべき主要な規制・ガイドラインをすべてカバーします。</p>
+      <div class="section-label" data-i18n="compliance.label">対応規制</div>
+      <h2 class="section-title" data-i18n="compliance.title">主要3規制に完全対応</h2>
+      <p class="section-desc" data-i18n="compliance.desc">日本で事業を行うAI企業が対応すべき主要な規制・ガイドラインをすべてカバーします。</p>
     </div>
     <div class="compliance-badges">
       <div class="compliance-badge fade-in">
         <div class="compliance-icon">🏛️</div>
-        <div class="compliance-name">METI AI事業者ガイドライン</div>
-        <div class="compliance-version">v1.1（2024年）</div>
-        <div class="compliance-items">
+        <div class="compliance-name" data-i18n="compliance.meti.name">METI AI事業者ガイドライン</div>
+        <div class="compliance-version" data-i18n="compliance.meti.version">v1.1（2024年）</div>
+        <div class="compliance-items" data-i18n-html="compliance.meti.items">
           開発者・提供者・利用者の<br>
           3者に対応する要求事項を<br>
           体系的にチェック
         </div>
-        <span class="compliance-status status-supported">✓ 対応済み</span>
+        <span class="compliance-status status-supported" data-i18n="compliance.supported">✓ 対応済み</span>
       </div>
       <div class="compliance-badge fade-in">
         <div class="compliance-icon">🌐</div>
         <div class="compliance-name">ISO/IEC 42001</div>
-        <div class="compliance-version">AIMS — AIマネジメントシステム</div>
-        <div class="compliance-items">
+        <div class="compliance-version" data-i18n="compliance.iso.version">AIMS — AIマネジメントシステム</div>
+        <div class="compliance-items" data-i18n-html="compliance.iso.items">
           27の要求事項に対応した<br>
           証拠テンプレートと<br>
           チェックリストを提供
         </div>
-        <span class="compliance-status status-supported">✓ 対応済み</span>
+        <span class="compliance-status status-supported" data-i18n="compliance.supported">✓ 対応済み</span>
       </div>
       <div class="compliance-badge fade-in">
         <div class="compliance-icon">⚖️</div>
-        <div class="compliance-name">AI推進法</div>
-        <div class="compliance-version">2025年6月施行</div>
-        <div class="compliance-items">
+        <div class="compliance-name" data-i18n="compliance.ailaw.name">AI推進法</div>
+        <div class="compliance-version" data-i18n="compliance.ailaw.version">2025年6月施行</div>
+        <div class="compliance-items" data-i18n-html="compliance.ailaw.items">
           義務規定・努力義務を<br>
           区別して15要件を<br>
           わかりやすくガイド
         </div>
-        <span class="compliance-status status-supported">✓ 対応済み</span>
+        <span class="compliance-status status-supported" data-i18n="compliance.supported">✓ 対応済み</span>
       </div>
     </div>
   </div>
@@ -933,61 +985,61 @@
 <section class="faq-section" id="faq">
   <div class="container">
     <div class="fade-in text-center">
-      <div class="section-label">よくある質問</div>
+      <div class="section-label" data-i18n="faq.label">よくある質問</div>
       <h2 class="section-title">FAQ</h2>
     </div>
     <div class="faq-list">
       <div class="faq-item fade-in">
         <div class="faq-question" tabindex="0" role="button" aria-expanded="false">
-          <span>AIガバナンスマークとは何ですか？</span>
+          <span data-i18n="faq.q1.q">AIガバナンスマークとは何ですか？</span>
           <div class="faq-icon">+</div>
         </div>
         <div class="faq-answer">
-          <div class="faq-answer-inner">
+          <div class="faq-answer-inner" data-i18n="faq.q1.a">
             AIガバナンスマークは、企業のAI利活用における適切なガバナンス体制を第三者が評価・認証する仕組みです。METI（経済産業省）が推進するAI事業者ガイドラインへの対応度を証明するもので、取引先・顧客・行政機関への信頼性証明として活用されています。JPGovAIは、このマーク取得に向けた準備を効率化するSaaSです。
           </div>
         </div>
       </div>
       <div class="faq-item fade-in">
         <div class="faq-question" tabindex="0" role="button" aria-expanded="false">
-          <span>コンサルなしでISO 42001認証は取れますか？</span>
+          <span data-i18n="faq.q2.q">コンサルなしでISO 42001認証は取れますか？</span>
           <div class="faq-icon">+</div>
         </div>
         <div class="faq-answer">
-          <div class="faq-answer-inner">
+          <div class="faq-answer-inner" data-i18n="faq.q2.a">
             はい、Enterpriseプランをご利用いただくことで、専門コンサルなしでの認証取得を支援します。JPGovAIは27の要求事項に対応した証拠テンプレート・チェックリスト・改善アクションを提供します。ただし、最終的な認証審査は認定機関（JAB等）が行います。複雑な組織構造をお持ちの場合は、当社の専任サポート担当にご相談ください。
           </div>
         </div>
       </div>
       <div class="faq-item fade-in">
         <div class="faq-question" tabindex="0" role="button" aria-expanded="false">
-          <span>ISO 42001認証とMETIガイドラインの違いは何ですか？</span>
+          <span data-i18n="faq.q3.q">ISO 42001認証とMETIガイドラインの違いは何ですか？</span>
           <div class="faq-icon">+</div>
         </div>
         <div class="faq-answer">
-          <div class="faq-answer-inner">
+          <div class="faq-answer-inner" data-i18n="faq.q3.a">
             ISO 42001はAIマネジメントシステムの国際規格で、第三者認証機関による審査・認証が伴います。METIガイドラインは日本国内向けのソフトロー（法的拘束力なし）で、自己適合宣言形式です。AI推進法は法律（2025年6月施行）で、一定条件下では法的義務が生じます。JPGovAIは3つすべてに対応し、重複する要件をまとめて効率よく対応できます。
           </div>
         </div>
       </div>
       <div class="faq-item fade-in">
         <div class="faq-question" tabindex="0" role="button" aria-expanded="false">
-          <span>データのセキュリティは安全ですか？</span>
+          <span data-i18n="faq.q4.q">データのセキュリティは安全ですか？</span>
           <div class="faq-icon">+</div>
         </div>
         <div class="faq-answer">
-          <div class="faq-answer-inner">
+          <div class="faq-answer-inner" data-i18n="faq.q4.a">
             JPGovAIはISO/IEC 27001準拠のセキュリティ基準を採用しています。データは日本国内のデータセンターに保存され、通信はすべてTLS 1.3で暗号化されます。アップロードされたエビデンス書類はSHA-256でハッシュ化・改竄検知が行われます。また、当社自身もJPGovAIを使ってAI推進法・METIガイドラインへの対応を実施しています（自社適用実績）。
           </div>
         </div>
       </div>
       <div class="faq-item fade-in">
         <div class="faq-question" tabindex="0" role="button" aria-expanded="false">
-          <span>無料プランでできることを教えてください。</span>
+          <span data-i18n="faq.q5.q">無料プランでできることを教えてください。</span>
           <div class="faq-icon">+</div>
         </div>
         <div class="faq-answer">
-          <div class="faq-answer-inner">
+          <div class="faq-answer-inner" data-i18n="faq.q5.a">
             無料プランでは、25問の診断チェックリストへの回答・AIガバナンス成熟度スコアの確認・基本的な現状レポートのダウンロードが可能です。「自社の現状を把握したい」「何が不足しているかを知りたい」という方はまず無料プランをお試しください。ギャップ分析・改善提案・エビデンス管理はStarter以上のプランでご利用いただけます。
           </div>
         </div>
@@ -999,13 +1051,14 @@
 <!-- CTA -->
 <section class="cta-section" id="early-access">
   <div class="container cta-content">
-    <h2>まずは無料で診断してみませんか？</h2>
-    <p>10分の質問に答えるだけで、AIガバナンスの現状と優先すべき改善アクションが明確になります。</p>
+    <h2 data-i18n="cta.title">まずは無料で診断してみませんか？</h2>
+    <p data-i18n="cta.desc">10分の質問に答えるだけで、AIガバナンスの現状と優先すべき改善アクションが明確になります。</p>
     <form class="input-group" onsubmit="handleSignup(event)">
-      <input type="email" placeholder="メールアドレスを入力" required aria-label="メールアドレス" id="email-input">
-      <button type="submit" class="btn-cta">早期アクセスに登録 →</button>
+      <input type="email" id="email-input" required aria-label="Email"
+             data-i18n-placeholder="cta.email.placeholder">
+      <button type="submit" class="btn-cta" data-i18n="cta.submit">早期アクセスに登録 →</button>
     </form>
-    <p class="cta-note" id="signup-note">登録無料・スパムメールは送りません・いつでも退会可能</p>
+    <p class="cta-note" id="signup-note" data-i18n="cta.note">登録無料・スパムメールは送りません・いつでも退会可能</p>
   </div>
 </section>
 
@@ -1014,16 +1067,458 @@
   <div class="container footer-inner">
     <a href="#top" class="footer-logo">JPGovAI</a>
     <div class="footer-links">
-      <a href="#">プライバシーポリシー</a>
-      <a href="#">利用規約</a>
-      <a href="#">お問い合わせ</a>
+      <a href="#" data-i18n="footer.privacy">プライバシーポリシー</a>
+      <a href="#" data-i18n="footer.terms">利用規約</a>
+      <a href="#" data-i18n="footer.contact">お問い合わせ</a>
     </div>
     <div>© 2026 JPGovAI. All rights reserved.</div>
   </div>
 </footer>
 
 <script>
-  // Smooth scroll for anchor links (polyfill for older browsers via CSS scroll-behavior)
+  // =====================================================
+  // i18n — 日本語⇔英語切替
+  // =====================================================
+
+  const TRANSLATIONS = {
+    ja: {
+      // NAV
+      'nav.cta': '無料で診断する →',
+
+      // HERO
+      'hero.badge': '2026年最新対応 — METI v1.1 / ISO 42001 / AI推進法',
+      'hero.h1': 'AIガバナンス、まだ<br class="br-mobile"><span class="accent">コンサルに500万円</span>払いますか？',
+      'hero.sub': 'JPGovAIなら<strong>月額29,800円</strong>で、<strong>METI AI事業者ガイドライン・ISO 42001・AI推進法</strong>に対応。<br>診断から証拠収集・レポート提出まで、すべてをワンプラットフォームで。',
+      'hero.cta.primary': '無料で診断する',
+      'hero.cta.secondary': '機能を見る',
+      'hero.note': 'クレジットカード不要・登録30秒',
+
+      // STATS
+      'stats.cost.label': 'コスト削減',
+      'stats.cost.sub': 'コンサルティング費用比',
+      'stats.unified.label': '規制に一元対応',
+      'stats.unified.sub': 'METI + ISO 42001 + AI推進法',
+      'stats.time.unit': '分',
+      'stats.time.label': 'で診断完了',
+      'stats.time.sub': '25問の成熟度チェックリスト',
+
+      // PROBLEMS
+      'problems.label': '課題',
+      'problems.title': 'AI事業者ガイドラインへの対応、<br>こんな状況ではありませんか？',
+      'problems.p1.title': 'ガイドラインが膨大すぎる',
+      'problems.p1.desc': 'METI AIガイドラインは100ページ超。ISO 42001も合わせると読み切れない量の要件が存在する。',
+      'problems.p2.title': '何から始めればいいか分からない',
+      'problems.p2.desc': 'どの要件が自社に適用されるのか、何を優先すべきか、社内で判断できる人材がいない。',
+      'problems.p3.title': 'コンサルに頼むと高額',
+      'problems.p3.desc': '専門コンサルへの依頼は初期費用100〜500万円+3〜6ヶ月のプロジェクト期間が標準的。',
+      'problems.p4.title': '社内に専門家がいない',
+      'problems.p4.desc': 'AIガバナンス専任担当がおらず、法務・IT・事業部門の誰が対応すべきかも不明確。',
+      'problems.p5.title': 'ISO 42001認証の準備が膨大',
+      'problems.p5.desc': '27の要求事項に対する証拠書類の収集・整理・提出準備に数ヶ月かかる。どこから手をつければ？',
+      'problems.p6.title': '規制のアップデートに追いつけない',
+      'problems.p6.desc': 'AI推進法施行・METI改訂など規制は毎年変わる。最新動向を常にフォローし続けるのは負担が大きい。',
+
+      // FEATURES
+      'features.label': '機能',
+      'features.title': 'AIガバナンス対応に必要なすべてが揃う',
+      'features.desc': '診断から証拠収集、レポート提出まで。12の専門機能が連携して対応負担をゼロに近づけます。',
+      'features.badge.all': '全プラン利用可',
+      'features.badge.starter': 'Starter以上',
+      'features.badge.professional': 'Professional以上',
+      'features.badge.enterprise': 'Enterprise',
+      'features.f1.title': 'AI利用状況診断',
+      'features.f1.desc': '25問の体系的な質問で組織のAIガバナンス成熟度スコアを算出。現状把握から始められます。',
+      'features.f2.title': 'ギャップ分析',
+      'features.f2.desc': '診断結果をもとに、各規制との差分をAIが自動分析。優先度付きで改善アクションを提案します。',
+      'features.f3.title': 'エビデンス管理',
+      'features.f3.desc': '証拠書類を規制要件にひもづけて一元管理。審査官が要求する形式で整理・検索できます。',
+      'features.f4.title': 'レポート自動生成',
+      'features.f4.desc': '申請用PDFをワンクリックで出力。METI提出用・ISO審査用・社内報告用の3フォーマットに対応。',
+      'features.f5.title': '改竄防止監査証跡',
+      'features.f5.desc': 'すべての操作・エビデンスにSHA-256ハッシュチェーンを付与。第三者審査でも信頼される証跡を自動生成。',
+      'features.f6.title': 'ISO 42001対応',
+      'features.f6.desc': '27の要求事項を網羅したチェックリストと証拠テンプレート。認証取得への最短ルートをガイドします。',
+      'features.f7.title': 'AI推進法対応',
+      'features.f7.desc': '2025年6月施行のAI推進法15要件に対応。義務・努力義務を区別して優先対応事項を明示します。',
+      'features.f8.title': 'ポリシーテンプレート自動生成',
+      'features.f8.desc': 'AI利用ポリシー・リスク管理規程・インシデント対応手順など5種類の雛形をAIが自動カスタマイズ。',
+      'features.f9.title': 'リスクアセスメント',
+      'features.f9.desc': 'EU AI Act準拠の4段階リスク分類（禁止・高リスク・限定リスク・最小リスク）でAIシステムを評価。',
+      'features.f10.title': 'タスク管理',
+      'features.f10.desc': '改善アクションをプロジェクト管理形式でトラッキング。担当者・期限・ステータスを一元管理。',
+      'features.f11.title': 'マルチ規制ダッシュボード',
+      'features.f11.desc': 'METI・ISO 42001・AI推進法の対応状況を一画面で可視化。経営層への報告資料も自動生成。',
+      'features.f12.title': 'エクスポート',
+      'features.f12.desc': 'CSV/JSON/認証パッケージ形式でデータを出力。外部監査・社内システム連携に対応。',
+
+      // COMPARE
+      'compare.label': '比較',
+      'compare.title': 'コンサルvsJPGovAI',
+      'compare.desc': '従来のコンサルティングと比べて、コスト・スピードともに圧倒的な違いがあります。',
+      'compare.th.item': '項目',
+      'compare.th.consultant': 'コンサルティング',
+      'compare.row1.label': '初期費用',
+      'compare.row1.consultant': '100〜500万円',
+      'compare.row1.jpgov': '0円',
+      'compare.row2.label': '月額費用',
+      'compare.row2.consultant': '別途見積もり',
+      'compare.row2.jpgov': '29,800円〜',
+      'compare.row3.label': '対応開始までの期間',
+      'compare.row3.consultant': '1〜2ヶ月',
+      'compare.row3.jpgov': '即日（登録30秒）',
+      'compare.row4.label': '診断完了まで',
+      'compare.row4.consultant': '数週間',
+      'compare.row4.jpgov': '10分',
+      'compare.row5.label': '規制アップデート対応',
+      'compare.row5.consultant': '都度見積もり',
+      'compare.row5.jpgov': '自動アップデート（無料）',
+      'compare.row6.label': 'ISO 42001対応',
+      'compare.row6.consultant': '△ 別途費用',
+      'compare.row6.jpgov': 'Enterpriseで対応',
+      'compare.row7.label': '24/7アクセス',
+      'compare.row8.label': '監査証跡の自動生成',
+
+      // PRICING
+      'pricing.label': '料金',
+      'pricing.title': 'シンプルな料金体系',
+      'pricing.desc': '無料プランから始めて、必要に応じてアップグレード。すべてのプランに30日間返金保証付き。',
+      'pricing.per_month': '/月',
+      'pricing.popular': '人気 No.1',
+      'pricing.free.desc': 'まず試してみたい方に',
+      'pricing.free.f1': 'AI利用状況診断（25問）',
+      'pricing.free.f2': '成熟度スコア算出',
+      'pricing.free.f3': '現状レポート（基本版）',
+      'pricing.free.f4': 'メール通知',
+      'pricing.free.cta': '無料で始める',
+      'pricing.starter.desc': 'ガバナンス対応を始めたい企業に',
+      'pricing.starter.f1': 'Freeプランのすべて',
+      'pricing.starter.f2': 'ギャップ分析（AI自動提案）',
+      'pricing.starter.f3': 'ポリシーテンプレート5種',
+      'pricing.starter.f4': 'リスクアセスメント',
+      'pricing.starter.f5': 'タスク管理',
+      'pricing.starter.f6': 'メールサポート',
+      'pricing.starter.cta': 'Starterを選ぶ',
+      'pricing.professional.desc': '認証取得を目指す企業に',
+      'pricing.professional.f1': 'Starterプランのすべて',
+      'pricing.professional.f2': 'エビデンス管理',
+      'pricing.professional.f3': 'レポート自動生成（PDF）',
+      'pricing.professional.f4': '改竄防止監査証跡',
+      'pricing.professional.f5': 'チームメンバー5名',
+      'pricing.professional.f6': '優先サポート',
+      'pricing.professional.cta': 'Professionalを選ぶ',
+      'pricing.enterprise.desc': 'ISO 42001認証を取得したい企業に',
+      'pricing.enterprise.f1': 'Professionalプランのすべて',
+      'pricing.enterprise.f2': 'ISO 42001全要求事項対応',
+      'pricing.enterprise.f3': 'AI推進法15要件対応',
+      'pricing.enterprise.f4': 'マルチ規制ダッシュボード',
+      'pricing.enterprise.f5': 'CSV/JSON/認証パッケージ出力',
+      'pricing.enterprise.f6': '無制限メンバー',
+      'pricing.enterprise.f7': '専任サポート担当',
+      'pricing.enterprise.cta': 'Enterpriseを選ぶ',
+
+      // COMPLIANCE
+      'compliance.label': '対応規制',
+      'compliance.title': '主要3規制に完全対応',
+      'compliance.desc': '日本で事業を行うAI企業が対応すべき主要な規制・ガイドラインをすべてカバーします。',
+      'compliance.meti.name': 'METI AI事業者ガイドライン',
+      'compliance.meti.version': 'v1.1（2024年）',
+      'compliance.meti.items': '開発者・提供者・利用者の<br>3者に対応する要求事項を<br>体系的にチェック',
+      'compliance.iso.version': 'AIMS — AIマネジメントシステム',
+      'compliance.iso.items': '27の要求事項に対応した<br>証拠テンプレートと<br>チェックリストを提供',
+      'compliance.ailaw.name': 'AI推進法',
+      'compliance.ailaw.version': '2025年6月施行',
+      'compliance.ailaw.items': '義務規定・努力義務を<br>区別して15要件を<br>わかりやすくガイド',
+      'compliance.supported': '✓ 対応済み',
+
+      // FAQ
+      'faq.label': 'よくある質問',
+      'faq.q1.q': 'AIガバナンスマークとは何ですか？',
+      'faq.q1.a': 'AIガバナンスマークは、企業のAI利活用における適切なガバナンス体制を第三者が評価・認証する仕組みです。METI（経済産業省）が推進するAI事業者ガイドラインへの対応度を証明するもので、取引先・顧客・行政機関への信頼性証明として活用されています。JPGovAIは、このマーク取得に向けた準備を効率化するSaaSです。',
+      'faq.q2.q': 'コンサルなしでISO 42001認証は取れますか？',
+      'faq.q2.a': 'はい、Enterpriseプランをご利用いただくことで、専門コンサルなしでの認証取得を支援します。JPGovAIは27の要求事項に対応した証拠テンプレート・チェックリスト・改善アクションを提供します。ただし、最終的な認証審査は認定機関（JAB等）が行います。複雑な組織構造をお持ちの場合は、当社の専任サポート担当にご相談ください。',
+      'faq.q3.q': 'ISO 42001認証とMETIガイドラインの違いは何ですか？',
+      'faq.q3.a': 'ISO 42001はAIマネジメントシステムの国際規格で、第三者認証機関による審査・認証が伴います。METIガイドラインは日本国内向けのソフトロー（法的拘束力なし）で、自己適合宣言形式です。AI推進法は法律（2025年6月施行）で、一定条件下では法的義務が生じます。JPGovAIは3つすべてに対応し、重複する要件をまとめて効率よく対応できます。',
+      'faq.q4.q': 'データのセキュリティは安全ですか？',
+      'faq.q4.a': 'JPGovAIはISO/IEC 27001準拠のセキュリティ基準を採用しています。データは日本国内のデータセンターに保存され、通信はすべてTLS 1.3で暗号化されます。アップロードされたエビデンス書類はSHA-256でハッシュ化・改竄検知が行われます。また、当社自身もJPGovAIを使ってAI推進法・METIガイドラインへの対応を実施しています（自社適用実績）。',
+      'faq.q5.q': '無料プランでできることを教えてください。',
+      'faq.q5.a': '無料プランでは、25問の診断チェックリストへの回答・AIガバナンス成熟度スコアの確認・基本的な現状レポートのダウンロードが可能です。「自社の現状を把握したい」「何が不足しているかを知りたい」という方はまず無料プランをお試しください。ギャップ分析・改善提案・エビデンス管理はStarter以上のプランでご利用いただけます。',
+
+      // CTA
+      'cta.title': 'まずは無料で診断してみませんか？',
+      'cta.desc': '10分の質問に答えるだけで、AIガバナンスの現状と優先すべき改善アクションが明確になります。',
+      'cta.email.placeholder': 'メールアドレスを入力',
+      'cta.submit': '早期アクセスに登録 →',
+      'cta.note': '登録無料・スパムメールは送りません・いつでも退会可能',
+
+      // FOOTER
+      'footer.privacy': 'プライバシーポリシー',
+      'footer.terms': '利用規約',
+      'footer.contact': 'お問い合わせ',
+    },
+
+    en: {
+      // NAV
+      'nav.cta': 'Start Free Assessment →',
+
+      // HERO
+      'hero.badge': 'Updated 2026 — METI v1.1 / ISO 42001 / AI Promotion Act',
+      'hero.h1': 'Still paying <span class="accent">¥5M for AI governance</span> consulting?',
+      'hero.sub': 'JPGovAI covers <strong>METI Guidelines, ISO 42001, and AI Promotion Act</strong> for just <strong>¥29,800/month</strong>.<br>From assessment to evidence collection and report submission — all in one platform.',
+      'hero.cta.primary': 'Start Free Assessment',
+      'hero.cta.secondary': 'View Features',
+      'hero.note': 'No credit card required · Sign up in 30 seconds',
+
+      // STATS
+      'stats.cost.label': 'Cost Reduction',
+      'stats.cost.sub': 'vs. consulting fees',
+      'stats.unified.label': 'Unified Compliance',
+      'stats.unified.sub': 'METI + ISO 42001 + AI Promotion Act',
+      'stats.time.unit': 'min',
+      'stats.time.label': 'to Complete Assessment',
+      'stats.time.sub': '25-question maturity checklist',
+
+      // PROBLEMS
+      'problems.label': 'Challenges',
+      'problems.title': 'Sound familiar?',
+      'problems.p1.title': 'Guidelines Are Overwhelming',
+      'problems.p1.desc': 'METI AI Guidelines exceed 100 pages. Combined with ISO 42001, the volume of requirements is impossible to read through.',
+      'problems.p2.title': 'Don\'t Know Where to Start',
+      'problems.p2.desc': 'Which requirements apply to your company? What to prioritize? There\'s no one internally who can make that call.',
+      'problems.p3.title': 'Consulting Is Expensive',
+      'problems.p3.desc': 'Specialized consultants typically require ¥1M–5M upfront plus 3–6 months of project time.',
+      'problems.p4.title': 'No In-House Experts',
+      'problems.p4.desc': 'No dedicated AI governance staff, and it\'s unclear whether legal, IT, or business teams should own compliance.',
+      'problems.p5.title': 'ISO 42001 Prep Takes Months',
+      'problems.p5.desc': 'Collecting, organizing, and submitting evidence for 27 requirements can take months. Where do you even begin?',
+      'problems.p6.title': 'Can\'t Keep Up with Regulation Changes',
+      'problems.p6.desc': 'AI Promotion Act enforcement, METI revisions — regulations change every year. Staying current is a constant burden.',
+
+      // FEATURES
+      'features.label': 'Features',
+      'features.title': 'Everything You Need for AI Governance Compliance',
+      'features.desc': 'From assessment to evidence collection and report submission — 12 specialized features work together to reduce your compliance burden to near zero.',
+      'features.badge.all': 'All Plans',
+      'features.badge.starter': 'Starter+',
+      'features.badge.professional': 'Professional+',
+      'features.badge.enterprise': 'Enterprise',
+      'features.f1.title': 'AI Usage Assessment',
+      'features.f1.desc': 'Calculate your organization\'s AI governance maturity score with 25 systematic questions. Start by understanding your current state.',
+      'features.f2.title': 'Gap Analysis',
+      'features.f2.desc': 'AI automatically analyzes gaps against each regulation based on assessment results. Suggests prioritized improvement actions.',
+      'features.f3.title': 'Evidence Management',
+      'features.f3.desc': 'Centrally manage evidence documents linked to regulatory requirements. Organize and search in the format auditors expect.',
+      'features.f4.title': 'Automated Report Generation',
+      'features.f4.desc': 'Export application-ready PDFs with one click. Supports 3 formats: METI submission, ISO audit, and internal reporting.',
+      'features.f5.title': 'Tamper-Proof Audit Trail',
+      'features.f5.desc': 'All operations and evidence are assigned SHA-256 hash chains. Auto-generates an audit trail trusted by third-party auditors.',
+      'features.f6.title': 'ISO 42001 Compliance',
+      'features.f6.desc': 'Checklists and evidence templates covering all 27 requirements. Guides you along the shortest path to certification.',
+      'features.f7.title': 'AI Promotion Act Compliance',
+      'features.f7.desc': 'Covers 15 requirements of the AI Promotion Act (effective June 2025). Clearly distinguishes mandatory vs. best-effort obligations.',
+      'features.f8.title': 'Policy Template Generator',
+      'features.f8.desc': 'AI auto-customizes 5 types of templates including AI usage policy, risk management regulations, and incident response procedures.',
+      'features.f9.title': 'Risk Assessment',
+      'features.f9.desc': 'Evaluate AI systems using EU AI Act\'s 4-tier risk classification: prohibited, high-risk, limited-risk, and minimal-risk.',
+      'features.f10.title': 'Task Management',
+      'features.f10.desc': 'Track improvement actions in a project management format. Centrally manage assignees, deadlines, and statuses.',
+      'features.f11.title': 'Multi-Regulation Dashboard',
+      'features.f11.desc': 'Visualize METI, ISO 42001, and AI Promotion Act compliance status on a single screen. Auto-generates executive reports.',
+      'features.f12.title': 'Export',
+      'features.f12.desc': 'Export data in CSV/JSON/certification package formats. Compatible with external audits and internal system integration.',
+
+      // COMPARE
+      'compare.label': 'Comparison',
+      'compare.title': 'Consulting vs JPGovAI',
+      'compare.desc': 'Compared to traditional consulting, JPGovAI offers a decisive advantage in both cost and speed.',
+      'compare.th.item': 'Item',
+      'compare.th.consultant': 'Consulting',
+      'compare.row1.label': 'Initial Cost',
+      'compare.row1.consultant': '¥1M–5M',
+      'compare.row1.jpgov': '¥0',
+      'compare.row2.label': 'Monthly Fee',
+      'compare.row2.consultant': 'Custom quote',
+      'compare.row2.jpgov': 'From ¥29,800',
+      'compare.row3.label': 'Time to Start',
+      'compare.row3.consultant': '1–2 months',
+      'compare.row3.jpgov': 'Instant (30-sec signup)',
+      'compare.row4.label': 'Time to Complete Assessment',
+      'compare.row4.consultant': 'Several weeks',
+      'compare.row4.jpgov': '10 minutes',
+      'compare.row5.label': 'Regulation Updates',
+      'compare.row5.consultant': 'Additional cost',
+      'compare.row5.jpgov': 'Auto-updated (free)',
+      'compare.row6.label': 'ISO 42001 Support',
+      'compare.row6.consultant': '△ Additional cost',
+      'compare.row6.jpgov': 'Available on Enterprise',
+      'compare.row7.label': '24/7 Access',
+      'compare.row8.label': 'Automated Audit Trail',
+
+      // PRICING
+      'pricing.label': 'Pricing',
+      'pricing.title': 'Simple, Transparent Pricing',
+      'pricing.desc': 'Start free and upgrade as needed. All plans include a 30-day money-back guarantee.',
+      'pricing.per_month': '/mo',
+      'pricing.popular': 'Most Popular',
+      'pricing.free.desc': 'For those who want to try it first',
+      'pricing.free.f1': 'AI Usage Assessment (25 questions)',
+      'pricing.free.f2': 'Maturity Score Calculation',
+      'pricing.free.f3': 'Basic Status Report',
+      'pricing.free.f4': 'Email Notifications',
+      'pricing.free.cta': 'Start for Free',
+      'pricing.starter.desc': 'For companies starting governance compliance',
+      'pricing.starter.f1': 'Everything in Free',
+      'pricing.starter.f2': 'Gap Analysis (AI-powered)',
+      'pricing.starter.f3': '5 Policy Templates',
+      'pricing.starter.f4': 'Risk Assessment',
+      'pricing.starter.f5': 'Task Management',
+      'pricing.starter.f6': 'Email Support',
+      'pricing.starter.cta': 'Choose Starter',
+      'pricing.professional.desc': 'For companies pursuing certification',
+      'pricing.professional.f1': 'Everything in Starter',
+      'pricing.professional.f2': 'Evidence Management',
+      'pricing.professional.f3': 'Automated PDF Reports',
+      'pricing.professional.f4': 'Tamper-Proof Audit Trail',
+      'pricing.professional.f5': '5 Team Members',
+      'pricing.professional.f6': 'Priority Support',
+      'pricing.professional.cta': 'Choose Professional',
+      'pricing.enterprise.desc': 'For companies pursuing ISO 42001 certification',
+      'pricing.enterprise.f1': 'Everything in Professional',
+      'pricing.enterprise.f2': 'Full ISO 42001 Requirements',
+      'pricing.enterprise.f3': 'AI Promotion Act (15 items)',
+      'pricing.enterprise.f4': 'Multi-Regulation Dashboard',
+      'pricing.enterprise.f5': 'CSV/JSON/Certification Package Export',
+      'pricing.enterprise.f6': 'Unlimited Members',
+      'pricing.enterprise.f7': 'Dedicated Support Manager',
+      'pricing.enterprise.cta': 'Choose Enterprise',
+
+      // COMPLIANCE
+      'compliance.label': 'Regulations',
+      'compliance.title': 'Full Coverage of 3 Major Regulations',
+      'compliance.desc': 'Covers all major regulations and guidelines that AI companies operating in Japan need to comply with.',
+      'compliance.meti.name': 'METI AI Business Guidelines',
+      'compliance.meti.version': 'v1.1 (2024)',
+      'compliance.meti.items': 'Systematically checks requirements<br>for developers, providers,<br>and users',
+      'compliance.iso.version': 'AIMS — AI Management System',
+      'compliance.iso.items': 'Evidence templates and checklists<br>covering all<br>27 requirements',
+      'compliance.ailaw.name': 'AI Promotion Act',
+      'compliance.ailaw.version': 'Effective June 2025',
+      'compliance.ailaw.items': 'Clearly guides all 15 requirements,<br>distinguishing mandatory<br>from best-effort obligations',
+      'compliance.supported': '✓ Supported',
+
+      // FAQ
+      'faq.label': 'FAQ',
+      'faq.q1.q': 'What is the AI Governance Mark?',
+      'faq.q1.a': 'The AI Governance Mark is a third-party evaluation and certification system for companies\' AI governance frameworks. It proves compliance with the METI AI Business Guidelines and serves as a trust signal to business partners, customers, and government agencies. JPGovAI is a SaaS that streamlines the preparation process for obtaining this mark.',
+      'faq.q2.q': 'Can we obtain ISO 42001 certification without a consultant?',
+      'faq.q2.a': 'Yes. With the Enterprise plan, JPGovAI supports certification without specialized consultants by providing evidence templates, checklists, and improvement actions for all 27 requirements. Note that the final certification audit is conducted by an accredited body (e.g., JAB). For complex organizational structures, please consult our dedicated support manager.',
+      'faq.q3.q': 'What is the difference between ISO 42001 and METI Guidelines?',
+      'faq.q3.a': 'ISO 42001 is an international standard for AI management systems, involving third-party audits and certification. METI Guidelines are Japan-specific soft law (no legal binding force) based on self-declaration of conformity. The AI Promotion Act is legislation (effective June 2025) that creates legal obligations under certain conditions. JPGovAI handles all three, efficiently addressing overlapping requirements together.',
+      'faq.q4.q': 'Is my data secure?',
+      'faq.q4.a': 'JPGovAI adopts security standards compliant with ISO/IEC 27001. Data is stored in Japanese data centers, and all communications are encrypted with TLS 1.3. Uploaded evidence documents are hashed and tamper-detected using SHA-256. We also use JPGovAI ourselves for our own AI Promotion Act and METI Guidelines compliance (self-applied).',
+      'faq.q5.q': 'What can I do with the free plan?',
+      'faq.q5.a': 'With the free plan, you can complete the 25-question diagnostic checklist, check your AI governance maturity score, and download a basic status report. If you want to understand your current state or identify gaps, start with the free plan. Gap analysis, improvement suggestions, and evidence management are available on Starter and above.',
+
+      // CTA
+      'cta.title': 'Ready to assess your AI governance for free?',
+      'cta.desc': 'Answer 10 minutes of questions to clarify your current AI governance status and the improvement actions you should prioritize.',
+      'cta.email.placeholder': 'Enter your email address',
+      'cta.submit': 'Join Early Access →',
+      'cta.note': 'Free to register · No spam · Unsubscribe anytime',
+
+      // FOOTER
+      'footer.privacy': 'Privacy Policy',
+      'footer.terms': 'Terms of Service',
+      'footer.contact': 'Contact Us',
+    }
+  };
+
+  // =====================================================
+  // 言語切替エンジン
+  // =====================================================
+
+  let currentLang = 'ja';
+
+  function detectInitialLang() {
+    // 1. localStorage の保存値を優先
+    const saved = localStorage.getItem('jpgov_lang');
+    if (saved === 'ja' || saved === 'en') return saved;
+
+    // 2. ブラウザ言語設定
+    const browserLang = (navigator.language || navigator.userLanguage || 'ja').toLowerCase();
+    return browserLang.startsWith('ja') ? 'ja' : 'en';
+  }
+
+  function applyTranslations(lang) {
+    const t = TRANSLATIONS[lang];
+    if (!t) return;
+
+    // data-i18n: テキストコンテンツ置換
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+      const key = el.getAttribute('data-i18n');
+      if (t[key] !== undefined) {
+        el.textContent = t[key];
+      }
+    });
+
+    // data-i18n-html: innerHTML置換（HTMLを含む翻訳）
+    document.querySelectorAll('[data-i18n-html]').forEach(el => {
+      const key = el.getAttribute('data-i18n-html');
+      if (t[key] !== undefined) {
+        el.innerHTML = t[key];
+      }
+    });
+
+    // data-i18n-placeholder: placeholder置換
+    document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+      const key = el.getAttribute('data-i18n-placeholder');
+      if (t[key] !== undefined) {
+        el.placeholder = t[key];
+      }
+    });
+  }
+
+  function setLang(lang) {
+    if (lang !== 'ja' && lang !== 'en') return;
+    if (lang === currentLang) return;
+
+    currentLang = lang;
+
+    // HTML lang属性
+    document.documentElement.lang = lang;
+
+    // 翻訳適用
+    applyTranslations(lang);
+
+    // localStorage保存
+    localStorage.setItem('jpgov_lang', lang);
+
+    // ボタンのアクティブ状態更新
+    document.getElementById('btn-ja').classList.toggle('active', lang === 'ja');
+    document.getElementById('btn-en').classList.toggle('active', lang === 'en');
+
+    // サインアップノートが成功/エラー状態なら初期化
+    const note = document.getElementById('signup-note');
+    if (note && !note.innerHTML.includes('<strong')) {
+      note.textContent = TRANSLATIONS[lang]['cta.note'];
+    }
+  }
+
+  // 初期言語を適用
+  (function init() {
+    const initLang = detectInitialLang();
+    currentLang = initLang;
+    document.documentElement.lang = initLang;
+
+    if (initLang !== 'ja') {
+      applyTranslations(initLang);
+      document.getElementById('btn-ja').classList.remove('active');
+      document.getElementById('btn-en').classList.add('active');
+    }
+  })();
+
+  // =====================================================
+  // Smooth scroll
+  // =====================================================
   document.querySelectorAll('a[href^="#"]').forEach(anchor => {
     anchor.addEventListener('click', function(e) {
       const href = this.getAttribute('href');
@@ -1038,17 +1533,17 @@
     });
   });
 
+  // =====================================================
   // FAQ toggle
+  // =====================================================
   document.querySelectorAll('.faq-question').forEach(question => {
     const toggle = () => {
       const item = question.closest('.faq-item');
       const isOpen = item.classList.contains('open');
-      // Close all
       document.querySelectorAll('.faq-item').forEach(i => {
         i.classList.remove('open');
         i.querySelector('.faq-question').setAttribute('aria-expanded', 'false');
       });
-      // Open clicked if it was closed
       if (!isOpen) {
         item.classList.add('open');
         question.setAttribute('aria-expanded', 'true');
@@ -1060,7 +1555,9 @@
     });
   });
 
-  // Intersection Observer for fade-in
+  // =====================================================
+  // Intersection Observer (fade-in)
+  // =====================================================
   const observer = new IntersectionObserver(entries => {
     entries.forEach(entry => {
       if (entry.isIntersecting) {
@@ -1094,8 +1591,8 @@
   //   - 本番前の動作確認・UI確認用プロトタイプ
   // =====================================================
 
-  const USE_FORMSPREE = false;       // Formspree使用時は true に変更
-  const FORMSPREE_ID = 'YOUR_FORM_ID';  // Formspree の form_id に書き換え
+  const USE_FORMSPREE = false;
+  const FORMSPREE_ID = 'YOUR_FORM_ID';
 
   function handleSignup(e) {
     e.preventDefault();
@@ -1104,15 +1601,15 @@
     const note = document.getElementById('signup-note');
     const btn = e.target.querySelector('.btn-cta');
     const email = emailInput.value.trim();
+    const lang = currentLang;
 
     if (!email) return;
 
-    // ボタンを送信中に変更
-    btn.textContent = '送信中...';
+    const sending = lang === 'en' ? 'Sending...' : '送信中...';
+    btn.textContent = sending;
     btn.disabled = true;
 
     if (USE_FORMSPREE) {
-      // ── 方式A: Formspree.io ──
       fetch(`https://formspree.io/f/${FORMSPREE_ID}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
@@ -1120,25 +1617,24 @@
       })
       .then(res => {
         if (res.ok) {
-          showSuccess(emailInput, note, btn, email);
+          showSuccess(emailInput, note, btn, email, lang);
         } else {
-          return res.json().then(data => { throw new Error(data.error || '送信エラー'); });
+          return res.json().then(data => { throw new Error(data.error || 'Error'); });
         }
       })
       .catch(err => {
         console.error('Formspree error:', err);
-        showError(note, btn);
+        showError(note, btn, lang);
       });
     } else {
-      // ── デモモード: localStorageに保存 ──
-      // 本番ではこのブロックを削除してください
       const registrations = JSON.parse(localStorage.getItem('jpgov_registrations') || '[]');
 
-      // 重複チェック
       if (registrations.some(r => r.email === email)) {
-        note.textContent = 'このメールアドレスはすでに登録済みです。';
+        note.textContent = lang === 'en'
+          ? 'This email address is already registered.'
+          : 'このメールアドレスはすでに登録済みです。';
         note.style.color = '#fbbf24';
-        btn.textContent = '早期アクセスに登録 →';
+        btn.textContent = TRANSLATIONS[lang]['cta.submit'];
         btn.disabled = false;
         return;
       }
@@ -1149,26 +1645,33 @@
         source: 'jpgov-ai-lp'
       });
       localStorage.setItem('jpgov_registrations', JSON.stringify(registrations));
-      console.log('[Demo] 登録済みリスト:', registrations);
+      console.log('[Demo] Registrations:', registrations);
 
-      // 少し待機してUXを演出
-      setTimeout(() => showSuccess(emailInput, note, btn, email), 600);
+      setTimeout(() => showSuccess(emailInput, note, btn, email, lang), 600);
     }
   }
 
-  function showSuccess(emailInput, note, btn, email) {
+  function showSuccess(emailInput, note, btn, email, lang) {
     emailInput.value = '';
-    btn.textContent = '登録完了 ✓';
+    btn.textContent = lang === 'en' ? 'Registered ✓' : '登録完了 ✓';
     btn.style.background = '#16a34a';
     btn.disabled = true;
-    note.innerHTML = `<strong style="color:#86efac">✓ ${email} を登録しました。</strong><br>
-      <span style="color:#64748b">リリース時にご連絡します。しばらくお待ちください。</span>`;
+
+    if (lang === 'en') {
+      note.innerHTML = `<strong style="color:#86efac">✓ ${email} registered successfully.</strong><br>
+        <span style="color:#64748b">We'll notify you at launch. Stay tuned!</span>`;
+    } else {
+      note.innerHTML = `<strong style="color:#86efac">✓ ${email} を登録しました。</strong><br>
+        <span style="color:#64748b">リリース時にご連絡します。しばらくお待ちください。</span>`;
+    }
   }
 
-  function showError(note, btn) {
-    btn.textContent = '早期アクセスに登録 →';
+  function showError(note, btn, lang) {
+    btn.textContent = TRANSLATIONS[lang]['cta.submit'];
     btn.disabled = false;
-    note.textContent = '送信に失敗しました。時間をおいて再度お試しください。';
+    note.textContent = lang === 'en'
+      ? 'Submission failed. Please try again later.'
+      : '送信に失敗しました。時間をおいて再度お試しください。';
     note.style.color = '#f87171';
   }
 </script>
