@@ -88,6 +88,25 @@ class AuditEventRow(Base):
     event_hash = Column(String, default="")
 
 
+class RiskAssessmentRow(Base):
+    __tablename__ = "risk_assessments"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    organization_id = Column(String, nullable=False)
+    system_name = Column(String, default="")
+    result_json = Column(Text, default="{}")
+    created_at = Column(String, default=lambda: datetime.now(timezone.utc).isoformat())
+
+
+class ActionTaskRow(Base):
+    __tablename__ = "action_tasks"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    organization_id = Column(String, nullable=False)
+    result_json = Column(Text, default="{}")
+    created_at = Column(String, default=lambda: datetime.now(timezone.utc).isoformat())
+
+
 # ── Database Manager ──────────────────────────────────────────────
 
 class DatabaseManager:

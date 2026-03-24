@@ -34,6 +34,54 @@ class MaturityLevel(int, Enum):
     LEVEL_5 = 5  # 最適化 — 継続的改善
 
 
+class RiskLevel(str, Enum):
+    """EU AI Act準拠のリスクレベル."""
+
+    HIGH = "high"
+    LIMITED = "limited"
+    MINIMAL = "minimal"
+
+
+class RiskCategory(str, Enum):
+    """リスクカテゴリ."""
+
+    BIOMETRIC = "biometric_identification"
+    INFRASTRUCTURE = "critical_infrastructure"
+    EDUCATION = "education"
+    EMPLOYMENT = "employment"
+    FINANCIAL = "financial"
+    LAW_ENFORCEMENT = "law_enforcement"
+    HEALTHCARE = "healthcare"
+    EMOTION = "emotion_recognition"
+    CONTENT_GENERATION = "content_generation"
+    CHATBOT = "chatbot"
+
+
+class TaskStatus(str, Enum):
+    """タスクステータス."""
+
+    TODO = "todo"
+    IN_PROGRESS = "in_progress"
+    DONE = "done"
+
+
+class PolicyType(str, Enum):
+    """ポリシー種別."""
+
+    AI_USAGE = "ai_usage"
+    RISK_MANAGEMENT = "risk_management"
+    ETHICS = "ethics"
+    DATA_MANAGEMENT = "data_management"
+    INCIDENT_RESPONSE = "incident_response"
+
+
+class ExportFormat(str, Enum):
+    """エクスポートフォーマット."""
+
+    CSV = "csv"
+    JSON = "json"
+
+
 # ── Organization ──────────────────────────────────────────────────
 
 class OrganizationCreate(BaseModel):
@@ -212,3 +260,209 @@ class AuditChainStatus(BaseModel):
     chain_valid: bool
     merkle_root: str
     errors: list[str] = Field(default_factory=list)
+
+
+# ── ISO 42001 Check ──────────────────────────────────────────────
+
+class ISOCheckItem(BaseModel):
+    """ISO 42001個別要求事項のチェック結果."""
+
+    req_id: str
+    clause: str
+    title: str
+    description: str
+    status: ComplianceStatus
+    score: float
+    meti_mapping: list[str] = Field(default_factory=list)
+    meti_mapping_titles: list[str] = Field(default_factory=list)
+
+
+class ISOClauseSummary(BaseModel):
+    """ISO 42001条項サマリー."""
+
+    clause_id: str
+    title: str
+    total_requirements: int
+    compliant_count: int
+    avg_score: float
+    status: ComplianceStatus
+
+
+class ISOCheckResult(BaseModel):
+    """ISO 42001チェック結果."""
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    organization_id: str
+    gap_analysis_id: str
+    total_requirements: int
+    compliant_count: int
+    partial_count: int
+    non_compliant_count: int
+    not_assessed_count: int = 0
+    overall_score: float
+    items: list[ISOCheckItem] = Field(default_factory=list)
+    clause_summaries: list[ISOClauseSummary] = Field(default_factory=list)
+    timestamp: str = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
+
+
+# ── Risk Assessment ──────────────────────────────────────────────
+
+class RiskAssessmentItem(BaseModel):
+    """リスクアセスメント個別項目."""
+
+    question_key: str
+    question: str
+    answer: bool
+    risk_level: RiskLevel
+    category: RiskCategory
+
+
+class RiskAssessmentResult(BaseModel):
+    """リスクアセスメント結果."""
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    organization_id: str
+    system_name: str
+    system_description: str = ""
+    overall_risk_level: RiskLevel
+    items: list[RiskAssessmentItem] = Field(default_factory=list)
+    additional_requirements: list[str] = Field(default_factory=list)
+    timestamp: str = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
+
+
+class RiskAssessmentRequest(BaseModel):
+    """リスクアセスメントリクエスト."""
+
+    organization_id: str
+    system_name: str
+    system_description: str = ""
+    answers: dict[str, bool]
+
+
+# ── Task Management ──────────────────────────────────────────────
+
+class ActionTask(BaseModel):
+    """改善アクションタスク."""
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    organization_id: str
+    gap_req_id: str = ""
+    title: str
+    description: str = ""
+    assignee: str = ""
+    due_date: str = ""
+    priority: str = "medium"
+    status: TaskStatus = TaskStatus.TODO
+    notes: list[str] = Field(default_factory=list)
+    created_at: str = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
+    updated_at: str = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
+
+
+class ActionTaskCreate(BaseModel):
+    """タスク作成リクエスト."""
+
+    organization_id: str
+    gap_req_id: str = ""
+    title: str
+    description: str = ""
+    assignee: str = ""
+    due_date: str = ""
+    priority: str = "medium"
+
+
+class ActionTaskUpdate(BaseModel):
+    """タスク更新リクエスト."""
+
+    status: TaskStatus | None = None
+    assignee: str | None = None
+    due_date: str | None = None
+    priority: str | None = None
+    note: str | None = None
+
+
+class TaskBoardSummary(BaseModel):
+    """カンバンボードサマリー."""
+
+    organization_id: str
+    total: int
+    todo_count: int
+    in_progress_count: int
+    done_count: int
+    overdue_count: int = 0
+    todo_tasks: list[ActionTask] = Field(default_factory=list)
+    in_progress_tasks: list[ActionTask] = Field(default_factory=list)
+    done_tasks: list[ActionTask] = Field(default_factory=list)
+
+
+# ── Policy Generator ─────────────────────────────────────────────
+
+class PolicyDocument(BaseModel):
+    """生成されたポリシー文書."""
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    organization_id: str = ""
+    policy_type: PolicyType
+    title: str
+    sections: list[dict[str, str]] = Field(default_factory=list)
+    full_text: str = ""
+    generated_at: str = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
+
+
+class PolicyGenerateRequest(BaseModel):
+    """ポリシー生成リクエスト."""
+
+    organization_id: str
+    organization_name: str
+    policy_type: PolicyType
+
+
+# ── Export ────────────────────────────────────────────────────────
+
+class ExportPackage(BaseModel):
+    """エクスポートパッケージ."""
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    organization_id: str
+    package_type: str
+    files: dict[str, str] = Field(default_factory=dict)
+    generated_at: str = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
+
+
+# ── Multi-Regulation Dashboard ───────────────────────────────────
+
+class RegulationStatus(BaseModel):
+    """個別規制の準拠状況."""
+
+    regulation_name: str
+    total_requirements: int
+    compliant_count: int
+    partial_count: int
+    non_compliant_count: int
+    compliance_rate: float
+    overall_score: float
+
+
+class MultiRegulationDashboard(BaseModel):
+    """マルチ規制ダッシュボード."""
+
+    organization_id: str
+    meti_status: RegulationStatus | None = None
+    iso_status: RegulationStatus | None = None
+    act_status: RegulationStatus | None = None
+    overall_compliance_rate: float = 0.0
+    priority_actions: list[dict[str, Any]] = Field(default_factory=list)
+    timestamp: str = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
