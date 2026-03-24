@@ -1,15 +1,23 @@
 # Copyright (c) 2026 Yutaro Maeda
-# Licensed under the MIT License. See LICENSE file for details.
+# Licensed under the Business Source License 1.1. See LICENSE file for details.
 
-"""経済産業省・総務省「AI事業者ガイドライン（第1.0版）」要件定義.
+"""経済産業省・総務省「AI事業者ガイドライン（第1.1版）」要件定義.
 
-本ファイルは2024年4月19日公開の「AI事業者ガイドライン（第1.0版）」に基づく。
+本ファイルは2025年3月公開の「AI事業者ガイドライン（第1.1版）」に基づく。
+第1.1版は2025年3月公開。第1.0版（2024年4月19日公開）からの主な変更点:
+- AI利用者向けガイダンスの拡充
+- 生成AI（基盤モデル）に関する記載の追加
+- リスクベースアプローチの明確化
+- 国際的な規制動向（EU AI Act等）との整合性強化
+- サプライチェーン上の責任分担の明確化
+
 ガイドラインはAI開発者・AI提供者・AI利用者の3事業者類型に共通する
 10の基本原則と、各原則に紐づく具体的要件を定義する。
 
 出典:
 - https://www.meti.go.jp/shingikai/mono_info_service/ai_shakai_jisso/20240419_report.html
 - https://www.meti.go.jp/press/2024/04/20240419004/20240419004.html
+- https://www.soumu.go.jp/main_content/001002576.pdf (第1.1版)
 """
 
 from __future__ import annotations
