@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Yutaro Maeda
+# Licensed under the MIT License. See LICENSE file for details.
+
 """Self-Assessment診断サービス.
 
 企業のAI利用状況に関する質問票の回答を受け取り、

@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Yutaro Maeda
+# Licensed under the MIT License. See LICENSE file for details.
+
 """レポート生成サービス.
 
 AI Governance Mark申請用の自己評価レポートをAI生成し、PDF出力する。

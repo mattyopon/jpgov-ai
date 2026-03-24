@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Yutaro Maeda
+# Licensed under the MIT License. See LICENSE file for details.
+
 """エビデンス管理サービス.
 
 各要件に対するエビデンス（方針文書、テスト結果、監査ログ等）の

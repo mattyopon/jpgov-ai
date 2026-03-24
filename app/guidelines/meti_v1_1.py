@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Yutaro Maeda
+# Licensed under the MIT License. See LICENSE file for details.
+
 """経済産業省・総務省「AI事業者ガイドライン（第1.0版）」要件定義.
 
 本ファイルは2024年4月19日公開の「AI事業者ガイドライン（第1.0版）」に基づく。

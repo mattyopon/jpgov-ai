@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Yutaro Maeda
+# Licensed under the MIT License. See LICENSE file for details.
+
 """ギャップ分析サービス.
 
 診断結果を元にMETI AI事業者ガイドラインの各要件に対するギャップを特定し、

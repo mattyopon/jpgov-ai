@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Yutaro Maeda
+# Licensed under the MIT License. See LICENSE file for details.
+
 """監査証跡サービス（ハッシュチェーン）.
 
 全操作の改竄防止ログを提供する。
