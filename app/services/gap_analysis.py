@@ -334,6 +334,24 @@ async def run_gap_analysis(
     return result
 
 
+def run_gap_analysis_sync(
+    assessment: "AssessmentResult",
+) -> GapAnalysisResult:
+    """run_gap_analysisの同期版ラッパー. Streamlit等の同期コンテキストから呼ぶ."""
+    import asyncio
+
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            # Streamlit等で既にイベントループが動いている場合
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                return pool.submit(asyncio.run, run_gap_analysis(assessment)).result()
+        return loop.run_until_complete(run_gap_analysis(assessment))
+    except RuntimeError:
+        return asyncio.run(run_gap_analysis(assessment))
+
+
 def get_gap_analysis(gap_id: str) -> GapAnalysisResult | None:
     """IDからギャップ分析結果を取得."""
     db = get_db()

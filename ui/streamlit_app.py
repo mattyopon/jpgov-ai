@@ -39,12 +39,12 @@ from app.guidelines.meti_v1_1 import ASSESSMENT_QUESTIONS, CATEGORIES, all_requi
 from app.models import AnswerItem, ComplianceStatus
 from app.services.assessment import run_assessment
 from app.services.ai_advisor import ChatRequest, chat
-from app.services.ai_registry import (
+from app.services.ai_registry import (  # noqa: E402
     AISystemCreate,
     list_ai_systems,
     register_ai_system,
 )
-from app.services.gap_analysis import run_gap_analysis
+from app.services.gap_analysis import run_gap_analysis_sync  # noqa: E402, F401
 
 
 # ── ユーティリティ ─────────────────────────────────────────────────
@@ -670,7 +670,7 @@ def _run_assessment_and_show_result() -> None:
                 result = run_assessment(st.session_state.organization_id, answers)
                 st.session_state.assessment_result = result
 
-                gap = _run_async(run_gap_analysis(result))
+                gap = run_gap_analysis_sync(result)
                 st.session_state.gap_result = gap
                 st.session_state.assessment_done = True
             except Exception as e:
@@ -1027,7 +1027,7 @@ def page_assessment() -> None:
                     result = run_assessment(st.session_state.organization_id, answers)
                     st.session_state.assessment_result = result
 
-                    gap = _run_async(run_gap_analysis(result))
+                    gap = run_gap_analysis_sync(result)
                     st.session_state.gap_result = gap
                     st.session_state.assessment_done = True
                     st.rerun()
