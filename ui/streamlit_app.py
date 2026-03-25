@@ -180,6 +180,35 @@ st.markdown("""
     .empty-state h3 {
         color: #495057;
     }
+    /* スコア凡例 */
+    .score-legend {
+        display: flex;
+        justify-content: center;
+        gap: 16px;
+        margin-top: 8px;
+        font-size: 0.85em;
+        flex-wrap: wrap;
+    }
+    .score-legend-item {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+    .score-legend-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        display: inline-block;
+    }
+    /* チャットウェルカム */
+    .chat-welcome {
+        text-align: center;
+        padding: 32px 20px;
+        color: #6c757d;
+        border: 1px dashed #dee2e6;
+        border-radius: 12px;
+        margin-bottom: 16px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -228,6 +257,17 @@ def _maturity_label(level: int) -> str:
         5: "継続的に改善している",
     }
     return labels.get(level, f"レベル{level}")
+
+
+def _score_legend_html() -> str:
+    """スコアの色分けの凡例HTMLを返す."""
+    return (
+        '<div class="score-legend">'
+        '<div class="score-legend-item"><span class="score-legend-dot" style="background:#dc3545"></span> 0〜2.0 要改善</div>'
+        '<div class="score-legend-item"><span class="score-legend-dot" style="background:#ffc107"></span> 2.0〜3.0 おおむね対応</div>'
+        '<div class="score-legend-item"><span class="score-legend-dot" style="background:#28a745"></span> 3.0〜4.0 十分に対応</div>'
+        '</div>'
+    )
 
 
 # 質問のヘルプテキスト（何を聞いているかの簡単な説明）
@@ -310,7 +350,7 @@ def show_welcome() -> None:
 
     _col_l, col_center, _col_r = st.columns([1, 2, 1])
     with col_center:
-        if st.button("始める", type="primary", use_container_width=True):
+        if st.button("無料で診断を始める", type="primary", use_container_width=True):
             st.session_state.current_page = "onboarding_org"
             st.rerun()
 
@@ -418,15 +458,6 @@ def show_onboarding_assessment() -> None:
     if help_text:
         st.markdown(f'<div class="question-help">{help_text}</div>', unsafe_allow_html=True)
 
-    # 回答ラベルを分かりやすく
-    answer_labels = []
-    for i, opt in enumerate(q.options):
-        level_hint = ["できていない", "一部できている", "検討中・策定中", "ほぼできている", "十分にできている"]
-        if i < len(level_hint):
-            answer_labels.append(f"{opt}")
-        else:
-            answer_labels.append(opt)
-
     current_answer = st.session_state.assessment_answers.get(q.question_id, 0)
     selected = st.radio(
         "回答を選んでください",
@@ -505,7 +536,8 @@ def _run_assessment_and_show_result() -> None:
         f'<div class="score-gauge">'
         f'<div class="score-number" style="color:{color}">{score:.1f}</div>'
         f'<div class="score-label">/ 4.0 ({_maturity_label(result.maturity_level)})</div>'
-        f'</div>',
+        f'</div>'
+        f'{_score_legend_html()}',
         unsafe_allow_html=True,
     )
 
@@ -573,7 +605,8 @@ def page_dashboard() -> None:
         f'<div class="score-gauge">'
         f'<div class="score-number" style="color:{color}">{score:.1f}</div>'
         f'<div class="score-label">/ 4.0 ({_maturity_label(assessment.maturity_level)})</div>'
-        f'</div>',
+        f'</div>'
+        f'{_score_legend_html()}',
         unsafe_allow_html=True,
     )
 
@@ -703,7 +736,8 @@ def page_assessment() -> None:
             f'<div class="score-gauge">'
             f'<div class="score-number" style="color:{color}">{score:.1f}</div>'
             f'<div class="score-label">/ 4.0 ({_maturity_label(result.maturity_level)})</div>'
-            f'</div>',
+            f'</div>'
+            f'{_score_legend_html()}',
             unsafe_allow_html=True,
         )
 
@@ -739,7 +773,10 @@ def page_assessment() -> None:
                     st.session_state.assessment_done = True
                     st.rerun()
                 except Exception as e:
-                    st.error(f"診断中にエラーが発生しました: {e}")
+                    st.error(
+                        "診断中にエラーが発生しました。しばらく待ってからもう一度お試しください。"
+                        f"\n\n技術的な詳細: {e}"
+                    )
 
         if st.button("回答をやり直す"):
             st.session_state.assessment_step = 0
@@ -779,13 +816,20 @@ def page_assessment() -> None:
 
     # ナビゲーション
     st.markdown("")
-    col_prev, _col_mid, col_next = st.columns([1, 1, 1])
+    col_prev, col_save, col_next = st.columns([1, 1, 1])
 
     with col_prev:
         if step > 0:
             if st.button("前の質問へ"):
                 st.session_state.assessment_step = step - 1
                 st.rerun()
+        else:
+            if st.button("ダッシュボードに戻る"):
+                st.session_state.current_page = "page_dashboard"
+                st.rerun()
+
+    with col_save:
+        st.caption("回答は自動保存されます")
 
     with col_next:
         if step < total_q - 1:
@@ -828,36 +872,33 @@ def page_gaps() -> None:
 
     st.markdown("---")
 
-    # フィルタ
+    # フィルタ（デフォルトは「要対応」を最初に見せる）
     status_filter = st.selectbox(
-        "表示する項目",
-        ["すべて", "要対応", "注意", "OK"],
-        help="対応状況で絞り込めます",
+        "表示する項目を絞り込む",
+        ["要対応のみ", "注意のみ", "OKのみ", "すべて表示"],
+        index=0,
+        help="ステータスで項目を絞り込めます。まずは「要対応」から確認するのがおすすめです。",
     )
 
     # フィルタ適用
     filtered_gaps = gap.gaps
-    if status_filter == "要対応":
+    if status_filter == "要対応のみ":
         filtered_gaps = [g for g in filtered_gaps if g.status == ComplianceStatus.NON_COMPLIANT]
-    elif status_filter == "注意":
+    elif status_filter == "注意のみ":
         filtered_gaps = [g for g in filtered_gaps if g.status == ComplianceStatus.PARTIAL]
-    elif status_filter == "OK":
+    elif status_filter == "OKのみ":
         filtered_gaps = [g for g in filtered_gaps if g.status == ComplianceStatus.COMPLIANT]
 
-    st.caption(f"{len(filtered_gaps)}件の項目")
+    if not filtered_gaps:
+        st.info("この条件に該当する項目はありません。フィルターを変更してください。")
+    else:
+        st.caption(f"{len(filtered_gaps)}件の項目")
 
     # ギャップ一覧
     for g in filtered_gaps:
         status_val = g.status.value
         label = _status_label(status_val)
         color = _status_color(status_val)
-
-        # カードスタイル
-        card_class = "gap-card-red"
-        if status_val == "compliant":
-            card_class = "gap-card-green"
-        elif status_val == "partial":
-            card_class = "gap-card-yellow"
 
         with st.expander(
             f"{'!' if status_val == 'non_compliant' else ''} "
@@ -910,12 +951,22 @@ def page_chat() -> None:
 
     if not has_api_key:
         st.info(
-            "より詳しい回答を得るには、ANTHROPIC_API_KEY 環境変数を設定してください。"
-            "現在はよくある質問から回答します。"
+            "AI による詳しい回答を有効にするには、管理者が ANTHROPIC_API_KEY を設定する必要があります。\n\n"
+            "現在は、あらかじめ用意された回答をもとにお答えします。"
+        )
+
+    # チャット履歴が空のときはウェルカムメッセージ
+    if not st.session_state.chat_history:
+        st.markdown(
+            '<div class="chat-welcome">'
+            '<h3>AIガバナンスについて何でもお聞きください</h3>'
+            '<p>診断結果の読み方、改善の進め方、法規制の概要など、<br>AIガバナンスに関する疑問にお答えします。</p>'
+            '</div>',
+            unsafe_allow_html=True,
         )
 
     # サジェストボタン
-    st.markdown("**質問の例:**")
+    st.markdown("**よくある質問:**")
     suggest_col1, suggest_col2, suggest_col3 = st.columns(3)
 
     suggested_question = None
@@ -970,12 +1021,15 @@ def page_chat() -> None:
                     st.error(error_msg)
                     st.session_state.chat_history.append({"role": "assistant", "content": error_msg})
 
-    # クリアボタン
+    # クリアボタン（サイドバーに配置して誤操作を防止）
     if st.session_state.chat_history:
-        if st.button("会話をクリア"):
-            st.session_state.chat_history = []
-            st.session_state.chat_session_id = ""
-            st.rerun()
+        st.markdown("")
+        _clr_l, _clr_m, clr_r = st.columns([2, 2, 1])
+        with clr_r:
+            if st.button("会話をクリア", help="これまでの会話をすべて削除します"):
+                st.session_state.chat_history = []
+                st.session_state.chat_session_id = ""
+                st.rerun()
 
 
 def page_settings() -> None:
@@ -1008,11 +1062,26 @@ def page_settings() -> None:
             if st.session_state.org_size in ["small", "medium", "large", "enterprise"] else 1,
         )
 
+        ai_usage_options = ["exploring", "piloting", "production", "scaling"]
+        ai_usage = st.selectbox(
+            "AIの利用状況",
+            ai_usage_options,
+            format_func=lambda v: {
+                "exploring": "検討・情報収集中",
+                "piloting": "一部で試験的に利用中",
+                "production": "本番運用している",
+                "scaling": "複数部門で本格運用している",
+            }.get(v, v),
+            index=ai_usage_options.index(st.session_state.org_ai_usage)
+            if st.session_state.org_ai_usage in ai_usage_options else 0,
+        )
+
         submitted = st.form_submit_button("保存", type="primary")
         if submitted:
             st.session_state.org_name = name
             st.session_state.org_industry = industry
             st.session_state.org_size = size
+            st.session_state.org_ai_usage = ai_usage
             st.success("組織情報を保存しました。")
 
     st.markdown("---")
@@ -1040,6 +1109,8 @@ def page_settings() -> None:
             )
 
             sys_submitted = st.form_submit_button("登録", type="primary")
+            if sys_submitted and not sys_name:
+                st.warning("システム名を入力してください。")
             if sys_submitted and sys_name:
                 try:
                     from app.services.ai_registry import AISystemRiskLevel
@@ -1085,21 +1156,55 @@ def page_settings() -> None:
 
     # ── データ管理
     st.subheader("データ管理")
+    st.caption("リセットすると、該当データが完全に削除されます。この操作は取り消せません。")
 
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("診断データをリセット"):
-            st.session_state.assessment_result = None
-            st.session_state.gap_result = None
-            st.session_state.assessment_answers = {}
-            st.session_state.assessment_step = 0
-            st.session_state.assessment_done = False
-            st.success("診断データをリセットしました。")
+        # 初期化: 確認状態
+        if "confirm_reset_assessment" not in st.session_state:
+            st.session_state.confirm_reset_assessment = False
+        if "confirm_reset_chat" not in st.session_state:
+            st.session_state.confirm_reset_chat = False
+
+        if not st.session_state.confirm_reset_assessment:
+            if st.button("診断データをリセット"):
+                st.session_state.confirm_reset_assessment = True
+                st.rerun()
+        else:
+            st.warning("診断データを本当にリセットしますか？回答内容と診断結果がすべて削除されます。")
+            c1, c2 = st.columns(2)
+            with c1:
+                if st.button("リセットする", type="primary", key="confirm_reset_assess_yes"):
+                    st.session_state.assessment_result = None
+                    st.session_state.gap_result = None
+                    st.session_state.assessment_answers = {}
+                    st.session_state.assessment_step = 0
+                    st.session_state.assessment_done = False
+                    st.session_state.confirm_reset_assessment = False
+                    st.success("診断データをリセットしました。")
+            with c2:
+                if st.button("キャンセル", key="confirm_reset_assess_no"):
+                    st.session_state.confirm_reset_assessment = False
+                    st.rerun()
+
     with col2:
-        if st.button("会話履歴をリセット"):
-            st.session_state.chat_history = []
-            st.session_state.chat_session_id = ""
-            st.success("会話履歴をリセットしました。")
+        if not st.session_state.get("confirm_reset_chat", False):
+            if st.button("会話履歴をリセット"):
+                st.session_state.confirm_reset_chat = True
+                st.rerun()
+        else:
+            st.warning("会話履歴を本当にリセットしますか？")
+            c1, c2 = st.columns(2)
+            with c1:
+                if st.button("リセットする", type="primary", key="confirm_reset_chat_yes"):
+                    st.session_state.chat_history = []
+                    st.session_state.chat_session_id = ""
+                    st.session_state.confirm_reset_chat = False
+                    st.success("会話履歴をリセットしました。")
+            with c2:
+                if st.button("キャンセル", key="confirm_reset_chat_no"):
+                    st.session_state.confirm_reset_chat = False
+                    st.rerun()
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -1122,7 +1227,6 @@ else:
 
     # サイドバー
     st.sidebar.title("AIガバナンス診断")
-    st.sidebar.caption(st.session_state.org_name if st.session_state.org_name else "JPGovAI")
     st.sidebar.markdown("---")
 
     page = st.sidebar.radio(
