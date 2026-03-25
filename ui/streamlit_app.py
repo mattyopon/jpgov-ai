@@ -23,10 +23,19 @@ st.set_page_config(
 )
 
 
+def _auth_headers() -> dict:
+    """認証ヘッダーを取得."""
+    if st.session_state.get("auth_token"):
+        return {"Authorization": f"Bearer {st.session_state.auth_token}"}
+    return {}
+
+
 def api_get(path: str, params: dict | None = None) -> dict | list | None:
     """API GETリクエスト."""
     try:
-        resp = requests.get(f"{API_BASE}{path}", params=params, timeout=30)
+        resp = requests.get(
+            f"{API_BASE}{path}", params=params, headers=_auth_headers(), timeout=30,
+        )
         resp.raise_for_status()
         return resp.json()
     except Exception as e:
@@ -37,7 +46,35 @@ def api_get(path: str, params: dict | None = None) -> dict | list | None:
 def api_post(path: str, data: dict) -> dict | None:
     """API POSTリクエスト."""
     try:
-        resp = requests.post(f"{API_BASE}{path}", json=data, timeout=60)
+        resp = requests.post(
+            f"{API_BASE}{path}", json=data, headers=_auth_headers(), timeout=60,
+        )
+        resp.raise_for_status()
+        return resp.json()
+    except Exception as e:
+        st.error(f"API通信エラー: {e}")
+        return None
+
+
+def api_put(path: str, data: dict) -> dict | None:
+    """API PUTリクエスト."""
+    try:
+        resp = requests.put(
+            f"{API_BASE}{path}", json=data, headers=_auth_headers(), timeout=30,
+        )
+        resp.raise_for_status()
+        return resp.json()
+    except Exception as e:
+        st.error(f"API通信エラー: {e}")
+        return None
+
+
+def api_delete(path: str) -> dict | None:
+    """API DELETEリクエスト."""
+    try:
+        resp = requests.delete(
+            f"{API_BASE}{path}", headers=_auth_headers(), timeout=30,
+        )
         resp.raise_for_status()
         return resp.json()
     except Exception as e:
@@ -56,14 +93,19 @@ page = st.sidebar.radio(
     [
         "ホーム",
         "組織登録",
+        "チーム管理",
         "自己診断",
         "ギャップ分析",
+        "成熟度推移",
+        "業界ベンチマーク",
         "ISO 42001チェック",
         "AI推進法チェック",
         "リスクアセスメント",
         "マルチ規制ダッシュボード",
         "ポリシー生成",
         "タスク管理",
+        "定期レビュー",
+        "承認ワークフロー",
         "エビデンス管理",
         "レポート生成",
         "エクスポート",
@@ -73,11 +115,44 @@ page = st.sidebar.radio(
 )
 
 st.sidebar.markdown("---")
+
+# Auth section
+if st.session_state.auth_token:
+    st.sidebar.success(f"ログイン中: {st.session_state.get('user_email', '')}")
+    if st.sidebar.button("ログアウト"):
+        st.session_state.auth_token = ""
+        st.session_state.user_id = ""
+        st.rerun()
+else:
+    with st.sidebar.expander("ログイン / 登録"):
+        auth_mode = st.radio("", ["ログイン", "新規登録"], key="auth_mode", horizontal=True)
+        auth_email = st.text_input("メール", key="auth_email")
+        auth_pass = st.text_input("パスワード", type="password", key="auth_pass")
+
+        if auth_mode == "ログイン" and st.button("ログイン"):
+            resp = api_post("/auth/login", {"email": auth_email, "password": auth_pass})
+            if resp:
+                st.session_state.auth_token = resp["access_token"]
+                st.session_state.user_id = resp["user_id"]
+                st.session_state["user_email"] = resp["email"]
+                st.rerun()
+        elif auth_mode == "新規登録" and st.button("登録"):
+            resp = api_post(
+                "/auth/register",
+                {"email": auth_email, "password": auth_pass, "display_name": auth_email},
+            )
+            if resp:
+                st.session_state.auth_token = resp["access_token"]
+                st.session_state.user_id = resp["user_id"]
+                st.session_state["user_email"] = resp["email"]
+                st.rerun()
+
+st.sidebar.markdown("---")
 st.sidebar.markdown("対応規制:")
 st.sidebar.markdown("- METI AI事業者ガイドライン v1.1")
 st.sidebar.markdown("- ISO/IEC 42001:2023 (AIMS)")
 st.sidebar.markdown("- AI推進法（2025年施行）")
-st.sidebar.markdown("Version 0.2.0")
+st.sidebar.markdown("Version 0.3.0")
 
 # ── Session State ─────────────────────────────────────────────────
 
@@ -89,6 +164,10 @@ if "assessment_id" not in st.session_state:
     st.session_state.assessment_id = ""
 if "gap_id" not in st.session_state:
     st.session_state.gap_id = ""
+if "auth_token" not in st.session_state:
+    st.session_state.auth_token = ""
+if "user_id" not in st.session_state:
+    st.session_state.user_id = ""
 
 
 # ── Pages ─────────────────────────────────────────────────────────
@@ -167,6 +246,53 @@ elif page == "組織登録":
 
     if st.session_state.org_id:
         st.info(f"現在の組織ID: {st.session_state.org_id}")
+
+elif page == "チーム管理":
+    st.title("チーム管理")
+    st.markdown("組織のメンバーを管理します。ロール: owner / admin / member / auditor / viewer")
+
+    if not st.session_state.org_id:
+        st.warning("先に「組織登録」を行ってください。")
+    else:
+        tab1, tab2 = st.tabs(["メンバー一覧", "メンバー招待"])
+
+        with tab1:
+            team = api_get(f"/team/{st.session_state.org_id}")
+            if team:
+                st.metric("メンバー数", team.get("member_count", 0))
+                members = team.get("members", [])
+                if members:
+                    for m in members:
+                        role_badge = {
+                            "owner": "👑", "admin": "🔧",
+                            "member": "👤", "auditor": "🔍", "viewer": "👁",
+                        }.get(m.get("role", ""), "👤")
+                        with st.expander(
+                            f"{role_badge} {m.get('email', '?')} ({m.get('role', '?')})"
+                        ):
+                            st.markdown(f"**ユーザーID**: {m.get('user_id', '')}")
+                            st.markdown(f"**ロール**: {m.get('role', '')}")
+                            st.markdown(f"**参加日**: {m.get('joined_at', '')[:10]}")
+                else:
+                    st.info("まだメンバーがいません。招待してください。")
+
+        with tab2:
+            with st.form("invite_form"):
+                email = st.text_input("メールアドレス", placeholder="user@example.com")
+                role = st.selectbox("ロール", ["member", "admin", "auditor", "viewer"])
+                submitted = st.form_submit_button("招待")
+
+            if submitted and email:
+                result = api_post(
+                    "/team/members",
+                    {
+                        "organization_id": st.session_state.org_id,
+                        "email": email,
+                        "role": role,
+                    },
+                )
+                if result:
+                    st.success(f"{email} を {role} として招待しました。")
 
 elif page == "自己診断":
     st.title("AI利用状況の自己診断")
@@ -271,6 +397,127 @@ elif page == "ギャップ分析":
                 if result.get("ai_recommendations"):
                     st.subheader("AI改善提案")
                     st.markdown(result["ai_recommendations"])
+
+elif page == "成熟度推移":
+    st.title("成熟度推移（タイムライン）")
+    st.markdown("診断結果の時系列変化を可視化します。")
+
+    if not st.session_state.org_id:
+        st.warning("先に「組織登録」を行ってください。")
+    else:
+        # Save snapshot button
+        if st.session_state.assessment_id:
+            if st.button("現在の診断結果をスナップショット保存"):
+                result = api_post(
+                    f"/timeline/snapshot?organization_id={st.session_state.org_id}"
+                    f"&assessment_id={st.session_state.assessment_id}",
+                    {},
+                )
+                if result:
+                    st.success("スナップショットを保存しました。")
+
+        # Timeline display
+        timeline = api_get(f"/timeline/{st.session_state.org_id}")
+        if timeline:
+            entries = timeline.get("entries", [])
+            if entries:
+                trend = timeline.get("trend", "stable")
+                trend_icon = {"improving": "📈", "declining": "📉", "stable": "➡️"}.get(trend, "➡️")
+                st.metric("トレンド", f"{trend_icon} {trend}")
+
+                if timeline.get("predicted_level3_date"):
+                    st.info(f"Level 3到達予測: {timeline['predicted_level3_date']}")
+
+                # Score timeline chart
+                st.subheader("スコア推移")
+                chart_data = []
+                for e in entries:
+                    chart_data.append({
+                        "日付": e["timestamp"][:10],
+                        "スコア": e["overall_score"],
+                        "Level": e["maturity_level"],
+                        "前回比": e["delta_from_previous"],
+                    })
+
+                import pandas as pd
+                df = pd.DataFrame(chart_data)
+                st.line_chart(df.set_index("日付")["スコア"])
+
+                # Detail table
+                st.subheader("詳細データ")
+                st.dataframe(df, use_container_width=True)
+            else:
+                st.info("まだスナップショットがありません。「自己診断」を実行し、スナップショットを保存してください。")
+
+elif page == "業界ベンチマーク":
+    st.title("業界ベンチマーク")
+    st.markdown("匿名化されたデータに基づく業界別のベンチマークを確認します。")
+
+    if not st.session_state.org_id:
+        st.warning("先に「組織登録」を行ってください。")
+    else:
+        tab1, tab2 = st.tabs(["ベンチマーク参照", "データ登録"])
+
+        with tab1:
+            industry = st.selectbox(
+                "業界を選択",
+                ["IT・通信", "金融・保険", "製造", "医療・ヘルスケア", "小売・EC", "公共・行政", "教育", "その他"],
+                key="bench_industry",
+            )
+            if st.button("ベンチマークを表示"):
+                benchmark = api_get(f"/benchmark/{industry}")
+                if benchmark:
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("業界平均スコア", f"{benchmark['avg_overall_score']:.2f}")
+                    with col2:
+                        st.metric("平均成熟度", f"Level {benchmark['avg_maturity_level']:.1f}")
+                    with col3:
+                        st.metric("サンプル数", benchmark["sample_count"])
+
+                    # Percentile thresholds
+                    st.subheader("パーセンタイル分布")
+                    thresholds = benchmark.get("percentile_thresholds", {})
+                    if thresholds:
+                        cols = st.columns(4)
+                        for col, (p, v) in zip(cols, sorted(thresholds.items())):
+                            with col:
+                                st.metric(f"上位{100 - int(p)}%", f"{v:.2f}")
+
+                    # Top improvement areas
+                    top_areas = benchmark.get("top_improvement_areas", [])
+                    if top_areas:
+                        st.subheader("最も改善の余地がある領域")
+                        for area in top_areas:
+                            st.markdown(f"- {area}")
+
+        with tab2:
+            st.markdown("自社のデータをベンチマークに登録します（匿名化されます）。")
+            if st.session_state.assessment_id:
+                bench_industry = st.selectbox(
+                    "業界",
+                    ["IT・通信", "金融・保険", "製造", "医療・ヘルスケア", "小売・EC"],
+                    key="submit_industry",
+                )
+                bench_size = st.selectbox(
+                    "企業規模",
+                    ["small", "medium", "large", "enterprise"],
+                    key="submit_size",
+                )
+                opt_in = st.checkbox("ベンチマークへの参加に同意", value=True)
+
+                if st.button("データを登録", type="primary"):
+                    result = api_post(
+                        f"/benchmark/submit?organization_id={st.session_state.org_id}"
+                        f"&industry={bench_industry}&size_bucket={bench_size}"
+                        f"&assessment_id={st.session_state.assessment_id}"
+                        f"&opt_in={opt_in}",
+                        {},
+                    )
+                    if result:
+                        st.success("データを登録しました。")
+            else:
+                st.warning("先に「自己診断」を実行してください。")
 
 elif page == "ISO 42001チェック":
     st.title("ISO/IEC 42001 (AIMS) 対応チェック")
@@ -593,6 +840,150 @@ elif page == "タスク管理":
                         )
                     if result:
                         st.success(f"{len(result)}件のタスクを生成しました。")
+
+elif page == "定期レビュー":
+    st.title("定期レビュー")
+    st.markdown("四半期/半期/年次のレビュースケジュールを管理します。")
+
+    if not st.session_state.org_id:
+        st.warning("先に「組織登録」を行ってください。")
+    else:
+        tab1, tab2, tab3 = st.tabs(["次回レビュー", "サイクル設定", "レビュー履歴"])
+
+        with tab1:
+            upcoming = api_get(f"/review-upcoming/{st.session_state.org_id}")
+            if upcoming:
+                for item in upcoming:
+                    is_overdue = item.get("is_overdue", False)
+                    icon = "🔴" if is_overdue else "📅"
+                    status = "期限超過" if is_overdue else "予定"
+                    st.markdown(
+                        f"{icon} **{item['cycle_type']}** — "
+                        f"次回: {item['next_review_date']} ({status})"
+                    )
+            else:
+                st.info("レビューサイクルが設定されていません。")
+
+        with tab2:
+            with st.form("cycle_form"):
+                cycle_type = st.selectbox(
+                    "サイクルタイプ",
+                    ["quarterly (四半期)", "semi_annual (半期)", "annual (年次)"],
+                )
+                start_date = st.date_input("開始日")
+                submitted = st.form_submit_button("サイクル作成")
+
+            if submitted:
+                result = api_post(
+                    "/review-cycles",
+                    {
+                        "organization_id": st.session_state.org_id,
+                        "cycle_type": cycle_type.split(" ")[0],
+                        "start_date": str(start_date),
+                    },
+                )
+                if result:
+                    st.success(f"レビューサイクルを作成しました。次回: {result.get('next_review_date', '')}")
+
+        with tab3:
+            records = api_get(f"/review-records/{st.session_state.org_id}")
+            if records:
+                for r in records:
+                    with st.expander(f"レビュー: {r.get('review_date', '?')} by {r.get('reviewer', '?')}"):
+                        st.markdown(f"**メモ**: {r.get('notes', '-')}")
+                        delta = r.get("delta_report", {})
+                        if delta.get("has_previous"):
+                            st.markdown(f"**前回比**: {delta.get('overall_delta', 0):+.2f}")
+                        else:
+                            st.info("初回レビュー")
+            else:
+                st.info("まだレビュー記録がありません。")
+
+elif page == "承認ワークフロー":
+    st.title("承認ワークフロー")
+    st.markdown("ポリシー変更の承認フローを管理します。")
+
+    if not st.session_state.org_id:
+        st.warning("先に「組織登録」を行ってください。")
+    else:
+        tab1, tab2 = st.tabs(["承認待ち一覧", "新規リクエスト"])
+
+        with tab1:
+            # Pending count
+            count_data = api_get(f"/approvals/pending-count/{st.session_state.org_id}")
+            if count_data:
+                st.metric("承認待ち", count_data.get("pending_count", 0))
+
+            approvals = api_get(f"/approvals/{st.session_state.org_id}")
+            if approvals:
+                for a in approvals:
+                    status = a.get("status", "?")
+                    status_icon = {
+                        "pending": "🟡", "approved": "🟢",
+                        "rejected": "🔴", "returned": "🟠",
+                    }.get(status, "⚪")
+                    with st.expander(
+                        f"{status_icon} {a.get('title', '?')} ({status})"
+                    ):
+                        st.markdown(f"**種別**: {a.get('request_type', '-')}")
+                        st.markdown(f"**説明**: {a.get('description', '-')}")
+                        st.markdown(f"**申請者**: {a.get('requested_by', '-')}")
+                        st.markdown(f"**承認者**: {a.get('approver_id', '-')}")
+                        st.markdown(f"**作成日**: {a.get('created_at', '')[:10]}")
+
+                        if status == "pending":
+                            col1, col2, col3 = st.columns(3)
+                            with col1:
+                                if st.button("承認", key=f"approve_{a['id']}"):
+                                    api_put(
+                                        f"/approvals/{a['id']}",
+                                        {"action": "approved", "comment": "承認しました"},
+                                    )
+                                    st.rerun()
+                            with col2:
+                                if st.button("却下", key=f"reject_{a['id']}"):
+                                    api_put(
+                                        f"/approvals/{a['id']}",
+                                        {"action": "rejected", "comment": "却下しました"},
+                                    )
+                                    st.rerun()
+                            with col3:
+                                if st.button("差し戻し", key=f"return_{a['id']}"):
+                                    api_put(
+                                        f"/approvals/{a['id']}",
+                                        {"action": "returned", "comment": "修正をお願いします"},
+                                    )
+                                    st.rerun()
+
+                        if a.get("comment"):
+                            st.markdown(f"**コメント**: {a['comment']}")
+            else:
+                st.info("承認リクエストがありません。")
+
+        with tab2:
+            with st.form("approval_form"):
+                title = st.text_input("タイトル", placeholder="AI利用方針の改定")
+                req_type = st.selectbox(
+                    "種別",
+                    ["policy_change", "review_completion", "risk_assessment", "other"],
+                )
+                description = st.text_area("説明")
+                approver = st.text_input("承認者ID")
+                submitted = st.form_submit_button("申請")
+
+            if submitted and title:
+                result = api_post(
+                    "/approvals",
+                    {
+                        "organization_id": st.session_state.org_id,
+                        "request_type": req_type,
+                        "title": title,
+                        "description": description,
+                        "approver_id": approver,
+                    },
+                )
+                if result:
+                    st.success("承認リクエストを作成しました。")
 
 elif page == "エビデンス管理":
     st.title("エビデンス管理")

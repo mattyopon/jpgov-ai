@@ -28,6 +28,10 @@ from app.models import (
     ActionTask,
     ActionTaskCreate,
     ActionTaskUpdate,
+    ApprovalAction,
+    ApprovalRequest,
+    ApprovalRequestCreate,
+    ApprovalStatus,
     AssessmentRequest,
     AssessmentResult,
     AuditChainStatus,
@@ -38,17 +42,28 @@ from app.models import (
     ExportFormat,
     ExportPackage,
     GapAnalysisResult,
+    IndustryBenchmark,
     ISOCheckResult,
     MultiRegulationDashboard,
+    MyBenchmarkPosition,
     OrganizationCreate,
+    OrganizationMember,
+    OrganizationMemberInvite,
+    OrganizationMemberUpdate,
     OrganizationResponse,
     PolicyDocument,
     PolicyGenerateRequest,
     ReportRequest,
     ReportResponse,
+    ReviewCycle,
+    ReviewCycleCreate,
+    ReviewRecord,
+    ReviewRecordCreate,
     RiskAssessmentRequest,
     RiskAssessmentResult,
     TaskBoardSummary,
+    TeamSummary,
+    TimelineResponse,
 )
 from app.services.assessment import get_assessment, run_assessment
 from app.services.audit_trail import get_audit_ledger
@@ -796,9 +811,358 @@ def verify_audit_chain(
     return ledger.get_status()
 
 
+# ── Team Management ──────────────────────────────────────────────
+
+@app.post("/api/team/members", response_model=OrganizationMember)
+def invite_member(
+    invite: OrganizationMemberInvite,
+    _user: TokenPayload = Depends(get_current_user),
+) -> OrganizationMember:
+    """組織にメンバーを招待."""
+    from app.services.team import add_member
+    member = add_member(
+        invite=invite,
+        user_id=invite.email,  # Simplified: use email as user_id for now
+        display_name="",
+        invited_by=_user.user_id,
+    )
+
+    ledger = get_audit_ledger()
+    ledger.append(
+        action="team.member_invite",
+        actor=_user.user_id,
+        resource_type="organization_member",
+        resource_id=member.id,
+        details={
+            "organization_id": invite.organization_id,
+            "email": invite.email,
+            "role": invite.role.value,
+        },
+    )
+
+    return member
+
+
+@app.delete("/api/team/members/{organization_id}/{user_id}")
+def remove_team_member(
+    organization_id: str,
+    user_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> dict:
+    """組織からメンバーを削除."""
+    from app.services.team import remove_member
+    success = remove_member(organization_id, user_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Member not found")
+
+    ledger = get_audit_ledger()
+    ledger.append(
+        action="team.member_remove",
+        actor=_user.user_id,
+        resource_type="organization_member",
+        resource_id=user_id,
+        details={"organization_id": organization_id},
+    )
+
+    return {"status": "removed"}
+
+
+@app.put("/api/team/members/{organization_id}/{user_id}", response_model=OrganizationMember)
+def update_team_member_role(
+    organization_id: str,
+    user_id: str,
+    update: OrganizationMemberUpdate,
+    _user: TokenPayload = Depends(get_current_user),
+) -> OrganizationMember:
+    """メンバーのロールを更新."""
+    from app.services.team import update_member_role
+    member = update_member_role(organization_id, user_id, update)
+    if member is None:
+        raise HTTPException(status_code=404, detail="Member not found")
+    return member
+
+
+@app.get("/api/team/{organization_id}", response_model=TeamSummary)
+def get_team(
+    organization_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> TeamSummary:
+    """チームサマリーを取得."""
+    from app.services.team import get_team_summary
+    summary = get_team_summary(organization_id)
+    if summary is None:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    return summary
+
+
+@app.get("/api/team/members/{organization_id}", response_model=list[OrganizationMember])
+def list_team_members(
+    organization_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> list[OrganizationMember]:
+    """組織のメンバー一覧を取得."""
+    from app.services.team import list_members
+    return list_members(organization_id)
+
+
+@app.get("/api/user/organizations")
+def get_my_organizations(
+    _user: TokenPayload = Depends(get_current_user),
+) -> list[dict]:
+    """自分が所属する組織の一覧を取得."""
+    from app.services.team import get_user_organizations
+    return get_user_organizations(_user.user_id)
+
+
+# ── Timeline ────────────────────────────────────────────────────
+
+@app.get("/api/timeline/{organization_id}", response_model=TimelineResponse)
+def get_org_timeline(
+    organization_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> TimelineResponse:
+    """成熟度推移データを取得."""
+    from app.services.timeline import get_timeline
+    return get_timeline(organization_id)
+
+
+@app.post("/api/timeline/snapshot")
+def save_timeline_snapshot(
+    organization_id: str,
+    assessment_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> dict:
+    """診断結果のスナップショットを保存."""
+    from app.services.timeline import save_snapshot
+    assessment = get_assessment(assessment_id)
+    if assessment is None:
+        raise HTTPException(status_code=404, detail="Assessment not found")
+
+    snapshot = save_snapshot(organization_id, assessment)
+    return {"snapshot_id": snapshot.id, "status": "saved"}
+
+
+# ── Review Cycle ────────────────────────────────────────────────
+
+@app.post("/api/review-cycles", response_model=ReviewCycle)
+def create_review_cycle_api(
+    data: ReviewCycleCreate,
+    _user: TokenPayload = Depends(get_current_user),
+) -> ReviewCycle:
+    """レビューサイクルを作成."""
+    from app.services.review_cycle import create_review_cycle
+    cycle = create_review_cycle(data)
+
+    ledger = get_audit_ledger()
+    ledger.append(
+        action="review_cycle.create",
+        actor=_user.user_id,
+        resource_type="review_cycle",
+        resource_id=cycle.id,
+        details={
+            "organization_id": data.organization_id,
+            "cycle_type": data.cycle_type,
+        },
+    )
+
+    return cycle
+
+
+@app.get("/api/review-cycles/{organization_id}", response_model=list[ReviewCycle])
+def list_review_cycles_api(
+    organization_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> list[ReviewCycle]:
+    """レビューサイクル一覧を取得."""
+    from app.services.review_cycle import list_review_cycles
+    return list_review_cycles(organization_id)
+
+
+@app.post("/api/review-records", response_model=ReviewRecord)
+def create_review_record_api(
+    data: ReviewRecordCreate,
+    _user: TokenPayload = Depends(get_current_user),
+) -> ReviewRecord:
+    """レビュー実施記録を作成."""
+    from app.services.review_cycle import create_review_record
+    record = create_review_record(data)
+
+    ledger = get_audit_ledger()
+    ledger.append(
+        action="review_record.create",
+        actor=_user.user_id,
+        resource_type="review_record",
+        resource_id=record.id,
+        details={
+            "organization_id": data.organization_id,
+            "cycle_id": data.cycle_id,
+        },
+    )
+
+    return record
+
+
+@app.get("/api/review-records/{organization_id}", response_model=list[ReviewRecord])
+def list_review_records_api(
+    organization_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+    cycle_id: str = "",
+) -> list[ReviewRecord]:
+    """レビュー記録一覧を取得."""
+    from app.services.review_cycle import list_review_records
+    return list_review_records(organization_id, cycle_id)
+
+
+@app.get("/api/review-upcoming/{organization_id}")
+def get_upcoming_reviews_api(
+    organization_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> list[dict]:
+    """次回レビュー予定を取得."""
+    from app.services.review_cycle import get_upcoming_reviews
+    return get_upcoming_reviews(organization_id)
+
+
+# ── Benchmark ───────────────────────────────────────────────────
+
+@app.get("/api/benchmark/{industry}", response_model=IndustryBenchmark | None)
+def get_benchmark(
+    industry: str,
+    _user: TokenPayload = Depends(get_current_user),
+    size_bucket: str = "",
+) -> IndustryBenchmark | None:
+    """業界ベンチマークを取得."""
+    from app.services.benchmark import get_industry_benchmark
+    result = get_industry_benchmark(industry, size_bucket)
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Benchmark not available (insufficient data for k-anonymity)",
+        )
+    return result
+
+
+@app.get("/api/benchmark/{industry}/my-position", response_model=MyBenchmarkPosition | None)
+def get_my_benchmark_position(
+    industry: str,
+    organization_id: str,
+    my_score: float,
+    _user: TokenPayload = Depends(get_current_user),
+) -> MyBenchmarkPosition | None:
+    """自社の業界内ポジションを取得."""
+    from app.services.benchmark import get_my_position
+    result = get_my_position(organization_id, industry, my_score)
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Position not available (insufficient benchmark data)",
+        )
+    return result
+
+
+@app.post("/api/benchmark/submit")
+def submit_benchmark(
+    organization_id: str,
+    industry: str,
+    size_bucket: str,
+    assessment_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+    opt_in: bool = True,
+) -> dict:
+    """ベンチマーク用データを登録."""
+    from app.services.benchmark import submit_benchmark_data
+    assessment = get_assessment(assessment_id)
+    if assessment is None:
+        raise HTTPException(status_code=404, detail="Assessment not found")
+
+    success = submit_benchmark_data(
+        organization_id, industry, size_bucket, assessment, opt_in
+    )
+    return {"status": "submitted" if success else "failed"}
+
+
+# ── Approval Workflow ───────────────────────────────────────────
+
+@app.post("/api/approvals", response_model=ApprovalRequest)
+def create_approval_api(
+    data: ApprovalRequestCreate,
+    _user: TokenPayload = Depends(get_current_user),
+) -> ApprovalRequest:
+    """承認リクエストを作成."""
+    from app.services.approval_workflow import create_approval_request
+    request = create_approval_request(data, requested_by=_user.user_id)
+
+    ledger = get_audit_ledger()
+    ledger.append(
+        action="approval.create",
+        actor=_user.user_id,
+        resource_type="approval_request",
+        resource_id=request.id,
+        details={
+            "organization_id": data.organization_id,
+            "title": data.title,
+            "request_type": data.request_type,
+        },
+    )
+
+    return request
+
+
+@app.get("/api/approvals/{organization_id}", response_model=list[ApprovalRequest])
+def list_approvals(
+    organization_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+    status: str = "",
+) -> list[ApprovalRequest]:
+    """承認リクエスト一覧を取得."""
+    from app.services.approval_workflow import list_approval_requests
+    approval_status = None
+    if status:
+        try:
+            approval_status = ApprovalStatus(status)
+        except ValueError:
+            pass
+    return list_approval_requests(organization_id, approval_status)
+
+
+@app.put("/api/approvals/{request_id}", response_model=ApprovalRequest)
+def process_approval_api(
+    request_id: str,
+    action: ApprovalAction,
+    _user: TokenPayload = Depends(get_current_user),
+) -> ApprovalRequest:
+    """承認/却下/差し戻しを処理."""
+    from app.services.approval_workflow import process_approval
+    result = process_approval(request_id, action, actor_id=_user.user_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Approval request not found")
+
+    ledger = get_audit_ledger()
+    ledger.append(
+        action=f"approval.{action.action.value}",
+        actor=_user.user_id,
+        resource_type="approval_request",
+        resource_id=request_id,
+        details={"comment": action.comment},
+    )
+
+    return result
+
+
+@app.get("/api/approvals/pending-count/{organization_id}")
+def get_pending_approvals_count(
+    organization_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> dict:
+    """承認待ちの件数を取得."""
+    from app.services.approval_workflow import get_pending_count
+    count = get_pending_count(organization_id)
+    return {"organization_id": organization_id, "pending_count": count}
+
+
 # ── Health ────────────────────────────────────────────────────────
 
 @app.get("/api/health")
 def health_check() -> dict:
     """ヘルスチェック."""
-    return {"status": "ok", "service": "JPGovAI", "version": "0.2.0"}
+    return {"status": "ok", "service": "JPGovAI", "version": "0.3.0"}

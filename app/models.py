@@ -87,6 +87,38 @@ class ExportFormat(str, Enum):
     JSON = "json"
 
 
+class UserRole(str, Enum):
+    """組織内ユーザーロール."""
+
+    OWNER = "owner"
+    ADMIN = "admin"
+    MEMBER = "member"
+    AUDITOR = "auditor"
+    VIEWER = "viewer"
+
+
+class ApprovalStatus(str, Enum):
+    """承認ステータス."""
+
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    RETURNED = "returned"  # 差し戻し
+
+
+class IndustryType(str, Enum):
+    """業界分類."""
+
+    IT = "IT・通信"
+    FINANCE = "金融・保険"
+    MANUFACTURING = "製造"
+    HEALTHCARE = "医療・ヘルスケア"
+    RETAIL = "小売・EC"
+    PUBLIC = "公共・行政"
+    EDUCATION = "教育"
+    OTHER = "その他"
+
+
 # ── Organization ──────────────────────────────────────────────────
 
 class OrganizationCreate(BaseModel):
@@ -471,3 +503,247 @@ class MultiRegulationDashboard(BaseModel):
     timestamp: str = Field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
+
+
+# ── Team / Organization Member ───────────────────────────────────
+
+class OrganizationMember(BaseModel):
+    """組織メンバー."""
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    organization_id: str
+    user_id: str
+    email: str = ""
+    display_name: str = ""
+    role: UserRole = UserRole.MEMBER
+    invited_by: str = ""
+    joined_at: str = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
+
+
+class OrganizationMemberInvite(BaseModel):
+    """メンバー招待リクエスト."""
+
+    organization_id: str
+    email: str
+    role: UserRole = UserRole.MEMBER
+
+
+class OrganizationMemberUpdate(BaseModel):
+    """メンバー更新リクエスト."""
+
+    role: UserRole | None = None
+
+
+class TeamSummary(BaseModel):
+    """チームサマリー."""
+
+    organization_id: str
+    organization_name: str
+    member_count: int
+    members: list[OrganizationMember] = Field(default_factory=list)
+
+
+# ── Role Permissions ─────────────────────────────────────────────
+
+ROLE_PERMISSIONS: dict[str, list[str]] = {
+    "owner": [
+        "org.manage", "org.delete", "member.invite", "member.remove",
+        "member.change_role", "assessment.run", "assessment.view",
+        "gap.run", "gap.view", "policy.create", "policy.approve",
+        "task.manage", "evidence.manage", "report.generate",
+        "audit.view", "benchmark.view", "review.manage",
+        "approval.approve", "approval.create",
+    ],
+    "admin": [
+        "org.manage", "member.invite", "member.remove",
+        "member.change_role", "assessment.run", "assessment.view",
+        "gap.run", "gap.view", "policy.create", "policy.approve",
+        "task.manage", "evidence.manage", "report.generate",
+        "audit.view", "benchmark.view", "review.manage",
+        "approval.approve", "approval.create",
+    ],
+    "member": [
+        "assessment.run", "assessment.view",
+        "gap.run", "gap.view", "policy.create",
+        "task.manage", "evidence.manage", "report.generate",
+        "benchmark.view", "review.manage",
+        "approval.create",
+    ],
+    "auditor": [
+        "assessment.view", "gap.view", "audit.view",
+        "evidence.manage", "report.generate",
+        "benchmark.view", "approval.approve",
+    ],
+    "viewer": [
+        "assessment.view", "gap.view", "benchmark.view",
+    ],
+}
+
+
+# ── Assessment Snapshot / Timeline ───────────────────────────────
+
+class AssessmentSnapshot(BaseModel):
+    """診断結果のスナップショット（時系列用）."""
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    organization_id: str
+    assessment_id: str
+    overall_score: float
+    maturity_level: int
+    category_scores: dict[str, float] = Field(default_factory=dict)
+    created_at: str = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
+
+
+class TimelineEntry(BaseModel):
+    """時系列のエントリ."""
+
+    assessment_id: str
+    timestamp: str
+    overall_score: float
+    maturity_level: int
+    category_scores: dict[str, float] = Field(default_factory=dict)
+    delta_from_previous: float = 0.0
+
+
+class TimelineResponse(BaseModel):
+    """時系列レスポンス."""
+
+    organization_id: str
+    entries: list[TimelineEntry] = Field(default_factory=list)
+    trend: str = ""  # "improving" / "stable" / "declining"
+    predicted_level3_date: str = ""
+
+
+# ── Review Cycle ─────────────────────────────────────────────────
+
+class ReviewCycle(BaseModel):
+    """定期レビューサイクル."""
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    organization_id: str
+    cycle_type: str = "quarterly"  # quarterly / semi_annual / annual
+    start_date: str = ""
+    next_review_date: str = ""
+    created_by: str = ""
+    created_at: str = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
+
+
+class ReviewCycleCreate(BaseModel):
+    """レビューサイクル作成リクエスト."""
+
+    organization_id: str
+    cycle_type: str = "quarterly"
+    start_date: str = ""
+
+
+class ReviewRecord(BaseModel):
+    """レビュー実施記録."""
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    organization_id: str
+    cycle_id: str
+    review_date: str = ""
+    assessment_id: str = ""
+    reviewer: str = ""
+    notes: str = ""
+    delta_report: dict[str, Any] = Field(default_factory=dict)
+    created_at: str = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
+
+
+class ReviewRecordCreate(BaseModel):
+    """レビュー記録作成リクエスト."""
+
+    organization_id: str
+    cycle_id: str
+    review_date: str = ""
+    assessment_id: str = ""
+    reviewer: str = ""
+    notes: str = ""
+
+
+# ── Industry Benchmark ───────────────────────────────────────────
+
+class CategoryBenchmark(BaseModel):
+    """カテゴリ別ベンチマーク."""
+
+    category_id: str
+    avg_score: float
+    sample_count: int
+
+
+class IndustryBenchmark(BaseModel):
+    """業界ベンチマーク."""
+
+    industry: str
+    size_bucket: str = ""  # small / medium / large / enterprise / all
+    sample_count: int = 0
+    avg_overall_score: float = 0.0
+    avg_maturity_level: float = 0.0
+    category_benchmarks: dict[str, CategoryBenchmark] = Field(default_factory=dict)
+    percentile_thresholds: dict[str, float] = Field(default_factory=dict)
+    top_improvement_areas: list[str] = Field(default_factory=list)
+    updated_at: str = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
+
+
+class MyBenchmarkPosition(BaseModel):
+    """自社のベンチマーク内ポジション."""
+
+    organization_id: str
+    industry: str
+    my_score: float
+    industry_avg: float
+    percentile: float = 0.0  # 上位何%か
+    gap_areas: list[dict[str, Any]] = Field(default_factory=list)
+
+
+# ── Approval Workflow ────────────────────────────────────────────
+
+class ApprovalRequest(BaseModel):
+    """承認リクエスト."""
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    organization_id: str
+    request_type: str = ""  # policy_change / review_completion / etc.
+    title: str = ""
+    description: str = ""
+    resource_type: str = ""
+    resource_id: str = ""
+    requested_by: str = ""
+    approver_id: str = ""
+    status: ApprovalStatus = ApprovalStatus.PENDING
+    comment: str = ""
+    created_at: str = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
+    updated_at: str = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
+
+
+class ApprovalRequestCreate(BaseModel):
+    """承認リクエスト作成."""
+
+    organization_id: str
+    request_type: str = ""
+    title: str = ""
+    description: str = ""
+    resource_type: str = ""
+    resource_id: str = ""
+    approver_id: str = ""
+
+
+class ApprovalAction(BaseModel):
+    """承認/却下/差し戻しアクション."""
+
+    action: ApprovalStatus  # approved / rejected / returned
+    comment: str = ""

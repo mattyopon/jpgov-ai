@@ -107,6 +107,89 @@ class ActionTaskRow(Base):
     created_at = Column(String, default=lambda: datetime.now(timezone.utc).isoformat())
 
 
+class OrganizationMemberRow(Base):
+    __tablename__ = "organization_members"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    organization_id = Column(String, nullable=False)
+    user_id = Column(String, nullable=False)
+    email = Column(String, default="")
+    display_name = Column(String, default="")
+    role = Column(String, default="member")
+    invited_by = Column(String, default="")
+    joined_at = Column(String, default=lambda: datetime.now(timezone.utc).isoformat())
+
+
+class AssessmentSnapshotRow(Base):
+    __tablename__ = "assessment_snapshots"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    organization_id = Column(String, nullable=False)
+    assessment_id = Column(String, nullable=False)
+    overall_score = Column(Float, default=0.0)
+    maturity_level = Column(Integer, default=1)
+    category_scores_json = Column(Text, default="{}")
+    created_at = Column(String, default=lambda: datetime.now(timezone.utc).isoformat())
+
+
+class ReviewCycleRow(Base):
+    __tablename__ = "review_cycles"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    organization_id = Column(String, nullable=False)
+    cycle_type = Column(String, default="quarterly")
+    start_date = Column(String, default="")
+    next_review_date = Column(String, default="")
+    created_by = Column(String, default="")
+    created_at = Column(String, default=lambda: datetime.now(timezone.utc).isoformat())
+
+
+class ReviewRecordRow(Base):
+    __tablename__ = "review_records"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    organization_id = Column(String, nullable=False)
+    cycle_id = Column(String, nullable=False)
+    review_date = Column(String, default="")
+    assessment_id = Column(String, default="")
+    reviewer = Column(String, default="")
+    notes = Column(Text, default="")
+    delta_report_json = Column(Text, default="{}")
+    created_at = Column(String, default=lambda: datetime.now(timezone.utc).isoformat())
+
+
+class BenchmarkDataRow(Base):
+    __tablename__ = "benchmark_data"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    organization_id = Column(String, nullable=False)
+    industry = Column(String, nullable=False)
+    size_bucket = Column(String, default="")
+    overall_score = Column(Float, default=0.0)
+    maturity_level = Column(Integer, default=1)
+    category_scores_json = Column(Text, default="{}")
+    opt_in = Column(Integer, default=1)  # 1=opted in, 0=opted out
+    created_at = Column(String, default=lambda: datetime.now(timezone.utc).isoformat())
+
+
+class ApprovalRequestRow(Base):
+    __tablename__ = "approval_requests"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    organization_id = Column(String, nullable=False)
+    request_type = Column(String, default="")
+    title = Column(String, default="")
+    description = Column(Text, default="")
+    resource_type = Column(String, default="")
+    resource_id = Column(String, default="")
+    requested_by = Column(String, default="")
+    approver_id = Column(String, default="")
+    status = Column(String, default="pending")
+    comment = Column(Text, default="")
+    created_at = Column(String, default=lambda: datetime.now(timezone.utc).isoformat())
+    updated_at = Column(String, default=lambda: datetime.now(timezone.utc).isoformat())
+
+
 # ── Database Manager ──────────────────────────────────────────────
 
 class DatabaseManager:
