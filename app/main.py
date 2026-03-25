@@ -25,6 +25,9 @@ from app.guidelines.ai_promotion_act import ACT_CHAPTERS, all_act_requirements
 from app.guidelines.iso42001 import ISO_CLAUSES, all_iso_requirements, get_meti_to_iso_mapping
 from app.guidelines.meti_v1_1 import ASSESSMENT_QUESTIONS, CATEGORIES
 from app.models import (
+    ActionEffectRecord,  # noqa: F401 (Phase 3: used in endpoint body)
+    ActionRanking,  # noqa: F401 (Phase 3: response_model)
+    ActionROI,  # noqa: F401 (Phase 3: response_model)
     ActionTask,
     ActionTaskCreate,
     ActionTaskUpdate,
@@ -42,8 +45,20 @@ from app.models import (
     ExportFormat,
     ExportPackage,
     GapAnalysisResult,
+    Incident,
+    IncidentCreate,
+    IncidentRCA,
+    IncidentRCACreate,
+    IncidentSeverity,
+    IncidentStats,
+    IncidentStatus,
+    IncidentUpdate,
     IndustryBenchmark,
+    IntegrationConfig,
+    IntegrationConfigCreate,
+    IntegrationConfigUpdate,
     ISOCheckResult,
+    MonthlyReport,
     MultiRegulationDashboard,
     MyBenchmarkPosition,
     OrganizationCreate,
@@ -53,6 +68,7 @@ from app.models import (
     OrganizationResponse,
     PolicyDocument,
     PolicyGenerateRequest,
+    RegulatoryUpdateCreate,  # noqa: F401 (Phase 3: used in endpoint body)
     ReportRequest,
     ReportResponse,
     ReviewCycle,
@@ -61,6 +77,7 @@ from app.models import (
     ReviewRecordCreate,
     RiskAssessmentRequest,
     RiskAssessmentResult,
+    ScorePrediction,  # noqa: F401 (Phase 3: response_model)
     TaskBoardSummary,
     TeamSummary,
     TimelineResponse,
@@ -1421,4 +1438,232 @@ def get_monthly_report_api(
 @app.get("/api/health")
 def health_check() -> dict:
     """ヘルスチェック."""
-    return {"status": "ok", "service": "JPGovAI", "version": "0.4.0"}
+    return {"status": "ok", "service": "JPGovAI", "version": "0.5.0"}
+
+
+# ── Pattern Learning (Phase 3) ──────────────────────────────────
+
+@app.post("/api/patterns/record")
+def record_patterns_api(
+    organization_id: str,
+    industry: str,
+    size_bucket: str,
+    gap_analysis_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> dict:
+    """ギャップ分析結果からパターンを記録."""
+    from app.services.pattern_learning import record_gap_patterns
+    gap = get_gap_analysis(gap_analysis_id)
+    if gap is None:
+        raise HTTPException(status_code=404, detail="Gap analysis not found")
+
+    count = record_gap_patterns(industry, size_bucket, gap)
+    return {"status": "recorded", "patterns_updated": count}
+
+
+@app.post("/api/patterns/resolve")
+def resolve_pattern_api(
+    industry: str,
+    size_bucket: str,
+    requirement_id: str,
+    resolution_days: float = 0.0,
+    _user: TokenPayload = Depends(get_current_user),
+) -> dict:
+    """Gapの解決を記録."""
+    from app.services.pattern_learning import mark_gap_resolved
+    success = mark_gap_resolved(industry, size_bucket, requirement_id, resolution_days)
+    if not success:
+        raise HTTPException(status_code=404, detail="Pattern not found")
+    return {"status": "resolved"}
+
+
+@app.get("/api/patterns/{industry}")
+def get_patterns_api(
+    industry: str,
+    size_bucket: str = "",
+    _user: TokenPayload = Depends(get_current_user),
+) -> list[dict]:
+    """業界のGapパターン一覧を取得."""
+    from app.services.pattern_learning import get_patterns
+    patterns = get_patterns(industry, size_bucket)
+    return [p.model_dump() for p in patterns]
+
+
+@app.get("/api/patterns/match/{industry}")
+def get_pattern_matches_api(
+    industry: str,
+    size_bucket: str,
+    gap_analysis_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> dict:
+    """パターンマッチングを実行."""
+    from app.services.pattern_learning import get_pattern_matches
+    gap = get_gap_analysis(gap_analysis_id)
+    if gap is None:
+        raise HTTPException(status_code=404, detail="Gap analysis not found")
+
+    result = get_pattern_matches(industry, size_bucket, gap)
+    return result.model_dump()
+
+
+# ── Regulatory Monitor (Phase 3) ────────────────────────────────
+
+@app.post("/api/regulatory-updates")
+def create_regulatory_update_api(
+    data: RegulatoryUpdateCreate,
+    _user: TokenPayload = Depends(get_current_user),
+) -> dict:
+    """規制変更を登録."""
+    from app.services.regulatory_monitor import register_update
+    update = register_update(data)
+
+    ledger = get_audit_ledger()
+    ledger.append(
+        action="regulatory_update.create",
+        actor=_user.user_id,
+        resource_type="regulatory_update",
+        resource_id=update.id,
+        details={
+            "regulation_name": data.regulation_name,
+            "title": data.title,
+            "severity": data.severity,
+        },
+    )
+
+    return update.model_dump()
+
+
+@app.get("/api/regulatory-updates")
+def list_regulatory_updates_api(
+    regulation_name: str = "",
+    severity: str = "",
+    _user: TokenPayload = Depends(get_current_user),
+) -> list[dict]:
+    """規制変更一覧を取得."""
+    from app.services.regulatory_monitor import list_updates
+    updates = list_updates(regulation_name, severity)
+    return [u.model_dump() for u in updates]
+
+
+@app.get("/api/regulatory-updates/{update_id}")
+def get_regulatory_update_api(
+    update_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> dict:
+    """規制変更を取得."""
+    from app.services.regulatory_monitor import get_update
+    update = get_update(update_id)
+    if update is None:
+        raise HTTPException(status_code=404, detail="Regulatory update not found")
+    return update.model_dump()
+
+
+@app.delete("/api/regulatory-updates/{update_id}")
+def delete_regulatory_update_api(
+    update_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> dict:
+    """規制変更を削除."""
+    from app.services.regulatory_monitor import delete_update
+    success = delete_update(update_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Regulatory update not found")
+    return {"status": "deleted"}
+
+
+@app.get("/api/regulatory-impact/{organization_id}")
+def get_regulatory_impact_api(
+    organization_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> dict:
+    """全規制変更の影響を一括分析."""
+    from app.services.regulatory_monitor import analyze_all_impacts
+    report = analyze_all_impacts(organization_id)
+    return report.model_dump()
+
+
+@app.get("/api/regulatory-impact/{organization_id}/{update_id}")
+def get_specific_regulatory_impact_api(
+    organization_id: str,
+    update_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> dict:
+    """特定の規制変更の影響を分析."""
+    from app.services.regulatory_monitor import analyze_impact
+    impact = analyze_impact(update_id, organization_id)
+    if impact is None:
+        raise HTTPException(status_code=404, detail="Update not found")
+    return impact.model_dump()
+
+
+# ── Action Analytics (Phase 3) ──────────────────────────────────
+
+@app.post("/api/action-effects", response_model=ActionROI)
+def record_action_effect_api(
+    data: ActionEffectRecord,
+    _user: TokenPayload = Depends(get_current_user),
+) -> ActionROI:
+    """改善アクションの効果を記録."""
+    from app.services.action_analytics import record_action_effect
+    roi = record_action_effect(data)
+
+    ledger = get_audit_ledger()
+    ledger.append(
+        action="action_effect.record",
+        actor=_user.user_id,
+        resource_type="action_effect",
+        resource_id=data.task_id,
+        details={
+            "organization_id": data.organization_id,
+            "action_type": data.action_type,
+            "score_delta": roi.score_delta,
+        },
+    )
+
+    return roi
+
+
+@app.get("/api/action-rankings/{organization_id}", response_model=ActionRanking)
+def get_action_rankings_api(
+    organization_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> ActionRanking:
+    """改善アクション効果ランキングを取得."""
+    from app.services.action_analytics import get_action_rankings
+    return get_action_rankings(organization_id)
+
+
+@app.get("/api/action-rankings/{organization_id}/industry-comparison")
+def get_industry_comparison_api(
+    organization_id: str,
+    industry: str,
+    size_bucket: str = "",
+    _user: TokenPayload = Depends(get_current_user),
+) -> list[dict]:
+    """他社の匿名化データとの比較."""
+    from app.services.action_analytics import get_industry_comparison
+    return get_industry_comparison(organization_id, industry, size_bucket)
+
+
+@app.get("/api/action-stats/{organization_id}")
+def get_action_type_stats_api(
+    organization_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> dict:
+    """アクション種別ごとの統計を取得."""
+    from app.services.action_analytics import get_action_type_stats
+    return get_action_type_stats(organization_id)
+
+
+# ── Prediction (Phase 3) ────────────────────────────────────────
+
+@app.get("/api/prediction/{organization_id}", response_model=ScorePrediction)
+def get_prediction_api(
+    organization_id: str,
+    target_date: str = "",
+    target_score: float = 2.4,
+    _user: TokenPayload = Depends(get_current_user),
+) -> ScorePrediction:
+    """スコア予測を取得."""
+    from app.services.prediction import predict_score
+    return predict_score(organization_id, target_date, target_score)

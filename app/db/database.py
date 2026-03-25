@@ -254,6 +254,53 @@ class MonthlyReportRow(Base):
     generated_at = Column(String, default=lambda: datetime.now(timezone.utc).isoformat())
 
 
+# ── Phase 3: Data Flywheel ───────────────────────────────────────
+
+class GapPatternRow(Base):
+    __tablename__ = "gap_patterns"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    industry = Column(String, nullable=False)
+    size_bucket = Column(String, default="")
+    requirement_id = Column(String, nullable=False)
+    occurrence_count = Column(Integer, default=0)
+    resolved_count = Column(Integer, default=0)
+    typical_actions_json = Column(Text, default="[]")
+    avg_resolution_days = Column(Float, default=0.0)
+    updated_at = Column(String, default=lambda: datetime.now(timezone.utc).isoformat())
+
+
+class RegulatoryUpdateRow(Base):
+    __tablename__ = "regulatory_updates"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    regulation_name = Column(String, nullable=False)
+    title = Column(String, nullable=False)
+    description = Column(Text, default="")
+    change_type = Column(String, default="amendment")  # amendment / new / repeal
+    affected_requirements_json = Column(Text, default="[]")
+    effective_date = Column(String, default="")
+    deadline = Column(String, default="")
+    severity = Column(String, default="medium")  # high / medium / low
+    created_by = Column(String, default="")
+    created_at = Column(String, default=lambda: datetime.now(timezone.utc).isoformat())
+
+
+class ActionEffectRow(Base):
+    __tablename__ = "action_effects"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    organization_id = Column(String, nullable=False)
+    task_id = Column(String, nullable=False)
+    action_type = Column(String, default="")
+    requirement_id = Column(String, default="")
+    score_before = Column(Float, default=0.0)
+    score_after = Column(Float, default=0.0)
+    effort_hours = Column(Float, default=0.0)
+    completed_at = Column(String, default="")
+    created_at = Column(String, default=lambda: datetime.now(timezone.utc).isoformat())
+
+
 # ── Database Manager ──────────────────────────────────────────────
 
 class DatabaseManager:

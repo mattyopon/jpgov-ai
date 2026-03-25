@@ -960,3 +960,161 @@ class MonthlyReport(BaseModel):
     generated_at: str = Field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
+
+
+# ── Phase 3: Data Flywheel — Pattern Learning ───────────────────
+
+class GapPattern(BaseModel):
+    """Gapパターン: 業界×規模×要件IDごとの出現パターン."""
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    industry: str
+    size_bucket: str = ""
+    requirement_id: str
+    occurrence_count: int = 0
+    resolved_count: int = 0
+    resolution_rate: float = 0.0  # resolved / occurrence
+    typical_actions: list[str] = Field(default_factory=list)
+    avg_resolution_days: float = 0.0
+    updated_at: str = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
+
+
+class PatternMatch(BaseModel):
+    """パターンマッチング結果: 新規診断時の推奨."""
+
+    requirement_id: str
+    requirement_title: str = ""
+    industry: str
+    occurrence_count: int = 0
+    resolution_rate: float = 0.0
+    recommended_actions: list[str] = Field(default_factory=list)
+    avg_resolution_days: float = 0.0
+    priority_suggestion: str = ""  # high / medium / low
+
+
+class PatternLearningResult(BaseModel):
+    """パターン学習の全体結果."""
+
+    organization_id: str = ""
+    industry: str
+    size_bucket: str = ""
+    matches: list[PatternMatch] = Field(default_factory=list)
+    total_patterns: int = 0
+    message: str = ""
+
+
+# ── Phase 3: Data Flywheel — Regulatory Monitor ─────────────────
+
+class RegulatoryUpdate(BaseModel):
+    """規制変更情報."""
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    regulation_name: str  # e.g. "METI AI事業者ガイドライン", "ISO 42001", "AI推進法"
+    title: str
+    description: str = ""
+    change_type: str = "amendment"  # amendment / new / repeal
+    affected_requirements: list[str] = Field(default_factory=list)
+    effective_date: str = ""
+    deadline: str = ""
+    severity: str = "medium"  # high / medium / low
+    created_by: str = ""
+    created_at: str = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
+
+
+class RegulatoryUpdateCreate(BaseModel):
+    """規制変更登録リクエスト."""
+
+    regulation_name: str
+    title: str
+    description: str = ""
+    change_type: str = "amendment"
+    affected_requirements: list[str] = Field(default_factory=list)
+    effective_date: str = ""
+    deadline: str = ""
+    severity: str = "medium"
+    created_by: str = ""
+
+
+class RegulatoryImpact(BaseModel):
+    """規制変更の顧客への影響分析."""
+
+    update_id: str
+    organization_id: str
+    regulation_name: str
+    title: str
+    affected_requirements: list[str] = Field(default_factory=list)
+    current_scores: dict[str, float] = Field(default_factory=dict)
+    estimated_impact: str = ""  # "スコアが2.5→2.0に低下する可能性"
+    recommended_actions: list[str] = Field(default_factory=list)
+    deadline: str = ""
+    severity: str = "medium"
+
+
+class RegulatoryImpactReport(BaseModel):
+    """規制変更影響レポート."""
+
+    organization_id: str
+    impacts: list[RegulatoryImpact] = Field(default_factory=list)
+    total_updates: int = 0
+    high_severity_count: int = 0
+
+
+# ── Phase 3: Data Flywheel — Action Analytics ───────────────────
+
+class ActionROI(BaseModel):
+    """改善アクションのROI."""
+
+    task_id: str
+    action_type: str = ""
+    requirement_id: str = ""
+    score_before: float = 0.0
+    score_after: float = 0.0
+    score_delta: float = 0.0
+    effort_hours: float = 0.0
+    roi: float = 0.0  # score_delta / effort_hours (0 if effort=0)
+
+
+class ActionRanking(BaseModel):
+    """改善アクションの効果ランキング."""
+
+    organization_id: str = ""
+    rankings: list[ActionROI] = Field(default_factory=list)
+    industry_comparison: list[dict[str, Any]] = Field(default_factory=list)
+    best_roi_action_type: str = ""
+    avg_score_improvement: float = 0.0
+
+
+class ActionEffectRecord(BaseModel):
+    """改善アクション効果記録リクエスト."""
+
+    organization_id: str
+    task_id: str
+    action_type: str = ""
+    requirement_id: str = ""
+    score_before: float = 0.0
+    score_after: float = 0.0
+    effort_hours: float = 0.0
+
+
+# ── Phase 3: Data Flywheel — Prediction ─────────────────────────
+
+class ScorePrediction(BaseModel):
+    """スコア予測結果."""
+
+    organization_id: str
+    current_score: float = 0.0
+    predicted_score: float = 0.0
+    prediction_date: str = ""  # いつ時点の予測か
+    days_to_level3: int = 0  # Level 3到達まであと何日（0=既に達成 or 予測不能）
+    days_to_target: int = 0
+    target_score: float = 2.4  # Level 3
+    trend: str = "stable"  # improving / stable / declining
+    confidence: str = "low"  # low / medium / high
+    monthly_rate: float = 0.0  # 月あたり改善速度
+    required_actions: int = 0  # 目標到達に必要な推定アクション数
+    regulatory_impact_adjustment: float = 0.0  # 規制変更による調整
+    category_predictions: dict[str, float] = Field(default_factory=dict)

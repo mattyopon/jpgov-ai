@@ -110,6 +110,10 @@ page = st.sidebar.radio(
         "エビデンス管理",
         "Slack連携設定",
         "月次レポート",
+        "パターン学習",
+        "規制変更モニター",
+        "改善効果分析",
+        "スコア予測",
         "レポート生成",
         "エクスポート",
         "監査証跡",
@@ -1285,6 +1289,313 @@ elif page == "月次レポート":
                                 st.markdown(f"  - {rec}")
             else:
                 st.info("まだ月次レポートがありません。")
+
+elif page == "パターン学習":
+    st.title("パターン学習 - 同業他社の改善実績")
+    st.markdown("同じ業界・規模の企業がどのGapをどう解決したか、匿名化データから学習した推奨を表示します。")
+
+    org_id = st.session_state.get("org_id", "")
+    gap_id = st.session_state.get("gap_id", "")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        industry = st.selectbox(
+            "業界",
+            ["IT・通信", "金融・保険", "製造", "医療・ヘルスケア", "小売・EC", "公共・行政", "教育", "その他"],
+            key="pattern_industry",
+        )
+    with col2:
+        size_bucket = st.selectbox(
+            "企業規模",
+            ["small", "medium", "large", "enterprise"],
+            index=1,
+            key="pattern_size",
+        )
+
+    tab1, tab2 = st.tabs(["パターンマッチング", "パターン一覧"])
+
+    with tab1:
+        if gap_id:
+            if st.button("パターンマッチングを実行", type="primary"):
+                with st.spinner("パターンマッチング中..."):
+                    result = api_get(
+                        f"/patterns/match/{industry}",
+                        params={
+                            "size_bucket": size_bucket,
+                            "gap_analysis_id": gap_id,
+                        },
+                    )
+                if result and result.get("matches"):
+                    st.success(result.get("message", ""))
+                    st.metric("マッチしたパターン数", len(result["matches"]))
+
+                    for match in result["matches"]:
+                        priority_color = {
+                            "high": "red", "medium": "orange", "low": "green"
+                        }.get(match.get("priority_suggestion", ""), "gray")
+                        st.markdown(f"### {match['requirement_id']}: {match.get('requirement_title', '')}")
+                        st.markdown(f"**優先度**: :{priority_color}[{match.get('priority_suggestion', 'N/A')}]")
+                        cols = st.columns(3)
+                        cols[0].metric("出現回数", match.get("occurrence_count", 0))
+                        cols[1].metric("解決率", f"{match.get('resolution_rate', 0) * 100:.0f}%")
+                        cols[2].metric("平均解決日数", f"{match.get('avg_resolution_days', 0):.0f}日")
+
+                        if match.get("recommended_actions"):
+                            st.markdown("**推奨アクション:**")
+                            for action in match["recommended_actions"]:
+                                st.markdown(f"  - {action}")
+                        st.markdown("---")
+                elif result:
+                    st.info(result.get("message", "パターンデータが不足しています。"))
+        else:
+            st.warning("先に「ギャップ分析」を実行してください。")
+
+    with tab2:
+        if st.button("パターン一覧を取得"):
+            patterns = api_get(f"/patterns/{industry}", params={"size_bucket": size_bucket})
+            if patterns:
+                st.info(f"{industry}業界のパターン: {len(patterns)}件")
+                for p in patterns:
+                    resolved_rate = p.get("resolution_rate", 0) * 100
+                    with st.expander(f"{p['requirement_id']} (出現: {p['occurrence_count']}回, 解決率: {resolved_rate:.0f}%)"):
+                        st.write(f"平均解決日数: {p.get('avg_resolution_days', 0):.0f}日")
+                        if p.get("typical_actions"):
+                            st.markdown("**典型的な改善アクション:**")
+                            for action in p["typical_actions"]:
+                                st.markdown(f"  - {action}")
+            else:
+                st.info("パターンデータが不足しています（k-anonymity保証のため5件以上必要）。")
+
+elif page == "規制変更モニター":
+    st.title("規制変更モニター")
+    st.markdown("AI推進法・METIガイドライン・ISO 42001の変更を追跡し、影響を分析します。")
+
+    tab1, tab2 = st.tabs(["規制変更一覧", "影響分析"])
+
+    with tab1:
+        st.subheader("規制変更の登録")
+        with st.form("regulatory_update_form"):
+            reg_name = st.selectbox(
+                "規制名",
+                ["METI AI事業者ガイドライン", "ISO 42001", "AI推進法", "EU AI Act"],
+            )
+            title = st.text_input("変更タイトル")
+            description = st.text_area("変更内容の説明")
+            change_type = st.selectbox("変更種別", ["amendment", "new", "repeal"])
+            affected_reqs = st.text_input("影響を受ける要件ID（カンマ区切り）", placeholder="C01-R01, C02-R01")
+            severity = st.selectbox("重大度", ["high", "medium", "low"])
+            effective_date = st.text_input("施行日", placeholder="2026-07-01")
+            deadline = st.text_input("対応期限", placeholder="2026-09-30")
+
+            submitted = st.form_submit_button("登録")
+            if submitted and title:
+                affected_list = [r.strip() for r in affected_reqs.split(",") if r.strip()] if affected_reqs else []
+                result = api_post("/regulatory-updates", {
+                    "regulation_name": reg_name,
+                    "title": title,
+                    "description": description,
+                    "change_type": change_type,
+                    "affected_requirements": affected_list,
+                    "effective_date": effective_date,
+                    "deadline": deadline,
+                    "severity": severity,
+                })
+                if result:
+                    st.success(f"規制変更を登録しました: {result.get('title', '')}")
+
+        st.subheader("登録済み規制変更")
+        filter_severity = st.selectbox("重大度フィルタ", ["", "high", "medium", "low"], key="reg_filter")
+        updates = api_get("/regulatory-updates", params={"severity": filter_severity} if filter_severity else {})
+        if updates:
+            for u in updates:
+                sev_icon = {"high": "!!!", "medium": "!!", "low": "!"}.get(u.get("severity", ""), "")
+                with st.expander(f"[{sev_icon} {u.get('severity', '')}] {u['regulation_name']}: {u['title']}"):
+                    st.markdown(f"**種別**: {u.get('change_type', '')}")
+                    st.markdown(f"**説明**: {u.get('description', '')}")
+                    st.markdown(f"**施行日**: {u.get('effective_date', 'N/A')}")
+                    st.markdown(f"**対応期限**: {u.get('deadline', 'N/A')}")
+                    if u.get("affected_requirements"):
+                        st.markdown(f"**影響要件**: {', '.join(u['affected_requirements'])}")
+        else:
+            st.info("登録済みの規制変更はありません。")
+
+    with tab2:
+        st.subheader("規制変更の影響分析")
+        org_id = st.session_state.get("org_id", "")
+        if org_id:
+            if st.button("影響分析を実行", type="primary"):
+                with st.spinner("分析中..."):
+                    report = api_get(f"/regulatory-impact/{org_id}")
+                if report and report.get("impacts"):
+                    cols = st.columns(3)
+                    cols[0].metric("規制変更数", report.get("total_updates", 0))
+                    cols[1].metric("高重大度", report.get("high_severity_count", 0))
+                    cols[2].metric("影響分析数", len(report["impacts"]))
+
+                    for impact in report["impacts"]:
+                        with st.expander(f"{impact['regulation_name']}: {impact['title']}"):
+                            st.markdown(f"**影響評価**: {impact.get('estimated_impact', '')}")
+                            st.markdown(f"**重大度**: {impact.get('severity', '')}")
+                            st.markdown(f"**対応期限**: {impact.get('deadline', 'N/A')}")
+                            if impact.get("recommended_actions"):
+                                st.markdown("**推奨アクション:**")
+                                for action in impact["recommended_actions"]:
+                                    st.markdown(f"  - {action}")
+                elif report:
+                    st.info("登録済みの規制変更がないか、影響はありません。")
+        else:
+            st.warning("先に「組織登録」を完了してください。")
+
+elif page == "改善効果分析":
+    st.title("改善アクション効果分析")
+    st.markdown("改善アクションのROI（投入工数 vs スコア改善幅）を分析し、最もコスパの良いアクションを特定します。")
+
+    org_id = st.session_state.get("org_id", "")
+
+    tab1, tab2, tab3 = st.tabs(["効果記録", "ランキング", "アクション種別統計"])
+
+    with tab1:
+        st.subheader("改善アクション効果の記録")
+        with st.form("action_effect_form"):
+            task_id = st.text_input("タスクID")
+            action_type = st.selectbox(
+                "アクション種別",
+                ["policy_creation", "training", "audit", "tool_introduction", "process_improvement", "documentation", "other"],
+            )
+            requirement_id = st.text_input("対象要件ID", placeholder="C01-R01")
+            cols = st.columns(3)
+            score_before = cols[0].number_input("実施前スコア", 0.0, 4.0, 1.0, step=0.1)
+            score_after = cols[1].number_input("実施後スコア", 0.0, 4.0, 2.0, step=0.1)
+            effort_hours = cols[2].number_input("投入工数（時間）", 0.0, 1000.0, 10.0, step=1.0)
+
+            submitted = st.form_submit_button("記録")
+            if submitted and org_id and task_id:
+                result = api_post("/action-effects", {
+                    "organization_id": org_id,
+                    "task_id": task_id,
+                    "action_type": action_type,
+                    "requirement_id": requirement_id,
+                    "score_before": score_before,
+                    "score_after": score_after,
+                    "effort_hours": effort_hours,
+                })
+                if result:
+                    st.success(f"記録しました: ROI = {result.get('roi', 0):.4f}")
+                    st.metric("スコア改善", f"+{result.get('score_delta', 0):.2f}")
+
+    with tab2:
+        st.subheader("改善アクション効果ランキング")
+        if org_id:
+            rankings = api_get(f"/action-rankings/{org_id}")
+            if rankings and rankings.get("rankings"):
+                cols = st.columns(3)
+                cols[0].metric("ベストROIアクション", rankings.get("best_roi_action_type", "N/A"))
+                cols[1].metric("平均スコア改善", f"+{rankings.get('avg_score_improvement', 0):.2f}")
+                cols[2].metric("記録アクション数", len(rankings["rankings"]))
+
+                st.markdown("### ROIランキング")
+                for i, r in enumerate(rankings["rankings"][:10], 1):
+                    delta_str = f"+{r['score_delta']:.2f}" if r["score_delta"] >= 0 else f"{r['score_delta']:.2f}"
+                    st.markdown(
+                        f"**{i}. {r.get('action_type', 'N/A')}** ({r.get('requirement_id', '')}) "
+                        f"— スコア変動: {delta_str}, 工数: {r.get('effort_hours', 0):.0f}h, "
+                        f"ROI: {r.get('roi', 0):.4f}"
+                    )
+            else:
+                st.info("まだ改善アクションの記録がありません。")
+        else:
+            st.warning("先に「組織登録」を完了してください。")
+
+    with tab3:
+        st.subheader("アクション種別統計")
+        if org_id:
+            stats = api_get(f"/action-stats/{org_id}")
+            if stats:
+                for atype, s in stats.items():
+                    with st.expander(f"{atype} ({s['count']}件)"):
+                        cols = st.columns(4)
+                        cols[0].metric("平均改善", f"+{s['avg_score_improvement']:.2f}")
+                        cols[1].metric("合計改善", f"+{s['total_score_improvement']:.2f}")
+                        cols[2].metric("平均工数", f"{s['avg_effort_hours']:.1f}h")
+                        cols[3].metric("ROI", f"{s['roi']:.4f}")
+            else:
+                st.info("まだ改善アクションの記録がありません。")
+
+elif page == "スコア予測":
+    st.title("スコア予測分析")
+    st.markdown("過去の改善トレンドから将来のスコアを予測します。")
+
+    org_id = st.session_state.get("org_id", "")
+
+    if org_id:
+        cols = st.columns(2)
+        with cols[0]:
+            target_score = st.number_input("目標スコア", 0.0, 4.0, 2.4, step=0.1)
+        with cols[1]:
+            target_date = st.text_input("予測対象日（省略時は90日後）", placeholder="2026-12-31")
+
+        if st.button("予測を実行", type="primary"):
+            with st.spinner("予測計算中..."):
+                params = {"target_score": target_score}
+                if target_date:
+                    params["target_date"] = target_date
+                prediction = api_get(f"/prediction/{org_id}", params=params)
+
+            if prediction:
+                # Overview metrics
+                cols = st.columns(4)
+                cols[0].metric("現在のスコア", f"{prediction.get('current_score', 0):.2f}")
+                cols[1].metric("予測スコア", f"{prediction.get('predicted_score', 0):.2f}")
+                trend_icon = {"improving": "+", "declining": "-", "stable": "="}.get(
+                    prediction.get("trend", ""), ""
+                )
+                cols[2].metric("トレンド", f"{trend_icon} {prediction.get('trend', 'N/A')}")
+                cols[3].metric("信頼度", prediction.get("confidence", "N/A"))
+
+                # Time estimates
+                st.markdown("---")
+                st.subheader("到達予測")
+                cols = st.columns(3)
+                days_l3 = prediction.get("days_to_level3", 0)
+                if days_l3 > 0:
+                    months_l3 = days_l3 / 30
+                    cols[0].metric("Level 3到達まで", f"約{months_l3:.0f}ヶ月 ({days_l3}日)")
+                else:
+                    cols[0].metric("Level 3到達まで", "達成済み" if prediction.get("current_score", 0) >= 2.4 else "予測不能")
+
+                days_target = prediction.get("days_to_target", 0)
+                if days_target > 0:
+                    months_t = days_target / 30
+                    cols[1].metric(f"目標({target_score})到達まで", f"約{months_t:.0f}ヶ月")
+                else:
+                    cols[1].metric(f"目標({target_score})到達まで", "達成済み" if prediction.get("current_score", 0) >= target_score else "予測不能")
+
+                cols[2].metric("月次改善速度", f"+{prediction.get('monthly_rate', 0):.3f}/月")
+
+                # Required actions
+                st.markdown("---")
+                st.subheader("必要なアクション")
+                cols = st.columns(2)
+                cols[0].metric("推定必要アクション数", prediction.get("required_actions", 0))
+                reg_adj = prediction.get("regulatory_impact_adjustment", 0)
+                if reg_adj < 0:
+                    cols[1].metric("規制変更の影響", f"{reg_adj:.2f}")
+                else:
+                    cols[1].metric("規制変更の影響", "なし")
+
+                # Category predictions
+                cat_preds = prediction.get("category_predictions", {})
+                if cat_preds:
+                    st.markdown("---")
+                    st.subheader("カテゴリ別予測スコア")
+                    pred_date = prediction.get("prediction_date", "")
+                    st.caption(f"予測対象日: {pred_date}")
+                    for cat_id, score in sorted(cat_preds.items()):
+                        st.progress(min(score / 4.0, 1.0), text=f"{cat_id}: {score:.2f}")
+            else:
+                st.info("予測に必要なデータが不足しています。診断を2回以上実施してください。")
+    else:
+        st.warning("先に「組織登録」を完了してください。")
 
 elif page == "レポート生成":
     st.title("レポート生成")
