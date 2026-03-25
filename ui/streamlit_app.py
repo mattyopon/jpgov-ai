@@ -5,6 +5,7 @@
 
 一般ユーザー向けに設計されたUI。初回はオンボーディングフローを表示し、
 診断完了後はダッシュボードを表示する。
+「ポチポチするだけで規制遵守が完了する」体験に最適化。
 
 使い方:
     streamlit run ui/streamlit_app.py
@@ -78,6 +79,14 @@ defaults = {
     "chat_history": [],
     "chat_session_id": "",
     "current_page": None,
+    # AutoFix状態
+    "autofix_results": {},
+    "autofix_running": False,
+    "autofix_progress": 0,
+    "autofix_total": 0,
+    "autofix_done": False,
+    # 対応完了マーク
+    "marked_complete": {},
 }
 for k, v in defaults.items():
     if k not in st.session_state:
@@ -209,6 +218,89 @@ st.markdown("""
         border-radius: 12px;
         margin-bottom: 16px;
     }
+    /* CTA大ボタン */
+    .cta-box {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 16px;
+        padding: 32px;
+        text-align: center;
+        margin: 24px 0;
+    }
+    .cta-box h2 {
+        color: white;
+        margin-bottom: 8px;
+    }
+    .cta-box p {
+        color: rgba(255,255,255,0.9);
+        font-size: 1.1em;
+        margin-bottom: 16px;
+    }
+    /* 修復進捗アイテム */
+    .fix-item {
+        padding: 8px 12px;
+        margin: 4px 0;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .fix-item-done {
+        background: #f0fff4;
+        border-left: 3px solid #28a745;
+    }
+    .fix-item-pending {
+        background: #f8f9fa;
+        border-left: 3px solid #dee2e6;
+    }
+    .fix-item-active {
+        background: #e8f4fd;
+        border-left: 3px solid #667eea;
+    }
+    /* 完了バナー */
+    .completion-banner {
+        background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+        border-radius: 16px;
+        padding: 40px;
+        text-align: center;
+        color: white;
+        margin: 24px 0;
+    }
+    .completion-banner h2 {
+        color: white;
+        font-size: 2em;
+    }
+    .completion-banner p {
+        color: rgba(255,255,255,0.9);
+        font-size: 1.1em;
+    }
+    /* フローステッパー */
+    .flow-stepper {
+        display: flex;
+        justify-content: center;
+        gap: 0;
+        margin: 24px 0;
+        flex-wrap: wrap;
+    }
+    .flow-step {
+        padding: 8px 20px;
+        font-size: 0.9em;
+        border: 1px solid #e9ecef;
+        background: #f8f9fa;
+        color: #6c757d;
+    }
+    .flow-step:first-child { border-radius: 8px 0 0 8px; }
+    .flow-step:last-child { border-radius: 0 8px 8px 0; }
+    .flow-step-active {
+        background: #667eea;
+        color: white;
+        border-color: #667eea;
+        font-weight: bold;
+    }
+    .flow-step-done {
+        background: #28a745;
+        color: white;
+        border-color: #28a745;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -267,6 +359,70 @@ def _score_legend_html() -> str:
         '<div class="score-legend-item"><span class="score-legend-dot" style="background:#ffc107"></span> 2.0〜3.0 おおむね対応</div>'
         '<div class="score-legend-item"><span class="score-legend-dot" style="background:#28a745"></span> 3.0〜4.0 十分に対応</div>'
         '</div>'
+    )
+
+
+def _count_action_needed(gap) -> int:  # noqa: ANN001
+    """要対応+注意の件数を返す."""
+    if gap is None:
+        return 0
+    return gap.non_compliant_count + gap.partial_count
+
+
+def _count_fixed() -> int:
+    """AutoFix済みの件数を返す."""
+    return len(st.session_state.autofix_results)
+
+
+def _count_marked_complete() -> int:
+    """対応完了マーク済みの件数を返す."""
+    return sum(1 for v in st.session_state.marked_complete.values() if v)
+
+
+def _get_flow_stage() -> str:
+    """現在のフロー段階を返す."""
+    if not st.session_state.assessment_done:
+        return "diagnose"
+    gap = st.session_state.gap_result
+    action_needed = _count_action_needed(gap)
+    if action_needed == 0:
+        return "complete"
+    fixed = _count_fixed()
+    if fixed == 0:
+        return "fix"
+    marked = _count_marked_complete()
+    if marked < action_needed:
+        return "review"
+    return "complete"
+
+
+def _render_flow_stepper(active: str) -> None:
+    """フローステッパーを表示."""
+    steps = [
+        ("diagnose", "診断"),
+        ("fix", "修復"),
+        ("review", "確認"),
+        ("complete", "完了"),
+    ]
+    stage_order = [s[0] for s in steps]
+    active_idx = stage_order.index(active) if active in stage_order else 0
+
+    html_parts = []
+    for i, (key, label) in enumerate(steps):
+        if i < active_idx:
+            cls = "flow-step flow-step-done"
+            prefix = "&#10003; "
+        elif i == active_idx:
+            cls = "flow-step flow-step-active"
+            prefix = ""
+        else:
+            cls = "flow-step"
+            prefix = ""
+        html_parts.append(f'<div class="{cls}">{prefix}{label}</div>')
+
+    st.markdown(
+        '<div class="flow-stepper">' + "".join(html_parts) + '</div>',
+        unsafe_allow_html=True,
     )
 
 
@@ -498,7 +654,7 @@ def show_onboarding_assessment() -> None:
 
 
 def _run_assessment_and_show_result() -> None:
-    """診断を実行して結果を表示."""
+    """診断を実行して結果を表示. 完了後に自動修復への導線を表示."""
     st.markdown("### Step 3 / 3: 診断結果")
 
     # まだ結果がない場合は診断実行
@@ -548,14 +704,54 @@ def _run_assessment_and_show_result() -> None:
         col2.metric("注意", f"{gap.partial_count}件", help="一部対応できているが改善の余地がある項目")
         col3.metric("要対応", f"{gap.non_compliant_count}件", help="対応が必要な項目")
 
-    st.markdown("")
+        # 要対応がある場合は大きな修復ボタンを表示
+        action_needed = _count_action_needed(gap)
+        if action_needed > 0:
+            st.markdown("")
+            st.markdown(
+                f'<div class="cta-box">'
+                f'<h2>{action_needed}項目が要対応です</h2>'
+                f'<p>ワンクリックで必要な文書・チェックリスト・タスクを自動生成します</p>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
 
-    _col_l, col_center, _col_r = st.columns([1, 2, 1])
-    with col_center:
-        if st.button("ダッシュボードへ", type="primary", use_container_width=True):
-            st.session_state.onboarded = True
-            st.session_state.current_page = None
-            st.rerun()
+            _col_l, col_center, _col_r = st.columns([1, 2, 1])
+            with col_center:
+                if st.button(
+                    "ワンクリックで全て修復する",
+                    type="primary",
+                    use_container_width=True,
+                    key="onboarding_fix_all",
+                ):
+                    st.session_state.onboarded = True
+                    st.session_state.current_page = "page_autofix"
+                    st.rerun()
+
+            st.markdown("")
+            _col_l2, col_center2, _col_r2 = st.columns([1, 2, 1])
+            with col_center2:
+                if st.button("まずはダッシュボードを見る", use_container_width=True):
+                    st.session_state.onboarded = True
+                    st.session_state.current_page = None
+                    st.rerun()
+        else:
+            st.markdown("")
+            _col_l, col_center, _col_r = st.columns([1, 2, 1])
+            with col_center:
+                st.success("全ての項目に対応済みです。")
+                if st.button("ダッシュボードへ", type="primary", use_container_width=True):
+                    st.session_state.onboarded = True
+                    st.session_state.current_page = None
+                    st.rerun()
+    else:
+        st.markdown("")
+        _col_l, col_center, _col_r = st.columns([1, 2, 1])
+        with col_center:
+            if st.button("ダッシュボードへ", type="primary", use_container_width=True):
+                st.session_state.onboarded = True
+                st.session_state.current_page = None
+                st.rerun()
 
     # カテゴリ別スコア
     st.markdown("---")
@@ -577,24 +773,26 @@ def _run_assessment_and_show_result() -> None:
 # ══════════════════════════════════════════════════════════════════
 
 def page_dashboard() -> None:
-    """ダッシュボード: 現在の状況を一目で確認."""
+    """ダッシュボード: フロー段階に応じたCTAを表示."""
     st.header("ダッシュボード")
-    st.caption("このページでは、AIガバナンスの現在の状況を一目で確認できます。")
 
     assessment = st.session_state.assessment_result
     gap = st.session_state.gap_result
 
     if assessment is None:
-        # 診断がまだの場合
+        # ── 診断前
+        _render_flow_stepper("diagnose")
         st.markdown("""
         <div class="empty-state">
             <h3>まだ診断していません</h3>
             <p>25問の診断に回答すると、ここにスコアと改善ポイントが表示されます。</p>
         </div>
         """, unsafe_allow_html=True)
-        if st.button("診断を始める", type="primary"):
-            st.session_state.current_page = "page_assessment"
-            st.rerun()
+        _col_l, col_center, _col_r = st.columns([1, 2, 1])
+        with col_center:
+            if st.button("診断を始める", type="primary", use_container_width=True):
+                st.session_state.current_page = "page_assessment"
+                st.rerun()
         return
 
     # ── メインスコア
@@ -612,6 +810,14 @@ def page_dashboard() -> None:
 
     # ── 対応状況サマリー
     if gap:
+        action_needed = _count_action_needed(gap)
+        fixed = _count_fixed()
+        marked = _count_marked_complete()
+
+        # フロー段階を判定して表示
+        stage = _get_flow_stage()
+        _render_flow_stepper(stage)
+
         st.markdown("#### あなたの対応状況")
         col1, col2, col3, col4 = st.columns(4)
         col1.metric(
@@ -630,54 +836,104 @@ def page_dashboard() -> None:
             help="対応が必要な項目の数",
         )
         total = gap.total_requirements
-        rate = gap.compliant_count / total if total > 0 else 0
+        rate = (gap.compliant_count + marked) / total if total > 0 else 0
         col4.metric(
             "対応率",
-            f"{rate:.0%}",
-            help="全項目のうち十分に対応できている割合",
+            f"{min(rate, 1.0):.0%}",
+            help="全項目のうち対応できている割合",
         )
 
         st.markdown("---")
 
+        # ── フロー段階に応じたCTA
+        if stage == "complete":
+            # 全完了
+            st.markdown(
+                '<div class="completion-banner">'
+                '<h2>おめでとうございます！</h2>'
+                '<p>全要件を充足しました。定期的に再診断して状態を維持しましょう。</p>'
+                '</div>',
+                unsafe_allow_html=True,
+            )
+        elif stage == "fix" and action_needed > 0:
+            # 診断後・修復前
+            st.markdown(
+                f'<div class="cta-box">'
+                f'<h2>{action_needed}項目が要対応です</h2>'
+                f'<p>ワンクリックで必要な文書・チェックリスト・タスクを自動生成します</p>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+            _col_l, col_center, _col_r = st.columns([1, 2, 1])
+            with col_center:
+                if st.button(
+                    "ワンクリックで全て修復する",
+                    type="primary",
+                    use_container_width=True,
+                    key="dashboard_fix_all",
+                ):
+                    st.session_state.current_page = "page_autofix"
+                    st.rerun()
+        elif stage == "review":
+            # 修復後・確認前
+            st.markdown(
+                f'<div class="cta-box">'
+                f'<h2>文書が生成されました</h2>'
+                f'<p>{fixed}件の修復文書を確認して承認してください（{marked}/{action_needed}件承認済み）</p>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+            _col_l, col_center, _col_r = st.columns([1, 2, 1])
+            with col_center:
+                if st.button(
+                    "生成された文書を確認する",
+                    type="primary",
+                    use_container_width=True,
+                    key="dashboard_review",
+                ):
+                    st.session_state.current_page = "page_gaps"
+                    st.rerun()
+
         # ── 次にやるべきこと トップ3
-        st.markdown("#### 次にやるべきこと")
+        if stage not in ("complete",):
+            st.markdown("#### 次にやるべきこと")
 
-        high_priority_gaps = [
-            g for g in gap.gaps
-            if g.status == ComplianceStatus.NON_COMPLIANT and g.priority == "high"
-        ]
-        if not high_priority_gaps:
             high_priority_gaps = [
                 g for g in gap.gaps
-                if g.status == ComplianceStatus.NON_COMPLIANT
+                if g.status == ComplianceStatus.NON_COMPLIANT and g.priority == "high"
             ]
-        if not high_priority_gaps:
-            high_priority_gaps = [
-                g for g in gap.gaps
-                if g.status == ComplianceStatus.PARTIAL
-            ]
+            if not high_priority_gaps:
+                high_priority_gaps = [
+                    g for g in gap.gaps
+                    if g.status == ComplianceStatus.NON_COMPLIANT
+                ]
+            if not high_priority_gaps:
+                high_priority_gaps = [
+                    g for g in gap.gaps
+                    if g.status == ComplianceStatus.PARTIAL
+                ]
 
-        top_actions = high_priority_gaps[:3]
+            top_actions = high_priority_gaps[:3]
 
-        if top_actions:
-            for i, g in enumerate(top_actions, 1):
-                actions_text = ""
-                if g.improvement_actions:
-                    actions_text = g.improvement_actions[0]
-                st.markdown(
-                    f'<div class="action-card">'
-                    f'<strong>{i}. {g.title}</strong><br>'
-                    f'<span style="color:#6c757d">{actions_text}</span>'
-                    f'</div>',
-                    unsafe_allow_html=True,
-                )
-        else:
-            st.success("すべての項目に対応済みです。")
+            if top_actions:
+                for i, g in enumerate(top_actions, 1):
+                    actions_text = ""
+                    if g.improvement_actions:
+                        actions_text = g.improvement_actions[0]
+                    st.markdown(
+                        f'<div class="action-card">'
+                        f'<strong>{i}. {g.title}</strong><br>'
+                        f'<span style="color:#6c757d">{actions_text}</span>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+            else:
+                st.success("すべての項目に対応済みです。")
 
-        st.markdown("")
-        if st.button("すべての改善項目を見る"):
-            st.session_state.current_page = "page_gaps"
-            st.rerun()
+            st.markdown("")
+            if st.button("すべての改善項目を見る"):
+                st.session_state.current_page = "page_gaps"
+                st.rerun()
 
     # ── カテゴリ別スコア
     st.markdown("---")
@@ -720,6 +976,9 @@ def page_assessment() -> None:
                 st.session_state.assessment_done = False
                 st.session_state.assessment_result = None
                 st.session_state.gap_result = None
+                st.session_state.autofix_results = {}
+                st.session_state.autofix_done = False
+                st.session_state.marked_complete = {}
                 st.rerun()
         with col2:
             if st.button("結果を見る", type="primary"):
@@ -908,6 +1167,196 @@ def _show_autofix_result(fix_result) -> None:  # noqa: ANN001
             )
 
 
+def page_autofix() -> None:
+    """自動修復: 全項目をその場で一括修復."""
+    st.header("自動修復")
+
+    gap = st.session_state.gap_result
+    if gap is None:
+        st.warning("先に診断を完了してください。")
+        if st.button("診断を始める", type="primary"):
+            st.session_state.current_page = "page_assessment"
+            st.rerun()
+        return
+
+    non_compliant_gaps = [
+        g for g in gap.gaps if g.status != ComplianceStatus.COMPLIANT
+    ]
+    total_to_fix = len(non_compliant_gaps)
+
+    if total_to_fix == 0:
+        st.success("全ての項目に対応済みです。修復の必要はありません。")
+        if st.button("ダッシュボードに戻る", type="primary"):
+            st.session_state.current_page = "page_dashboard"
+            st.rerun()
+        return
+
+    # 既に全件修復済みかチェック
+    all_fixed = all(
+        g.req_id in st.session_state.autofix_results
+        for g in non_compliant_gaps
+    )
+
+    if all_fixed:
+        # ── 修復完了表示
+        st.markdown(
+            f'<div class="completion-banner">'
+            f'<h2>{total_to_fix}/{total_to_fix} 修復完了！</h2>'
+            f'<p>全ての要対応項目に対する文書・チェックリスト・タスクを生成しました</p>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+        # 修復済みアイテムのリスト
+        for g in non_compliant_gaps:
+            fix_result = st.session_state.autofix_results.get(g.req_id)
+            doc_count = len(fix_result.generated_documents) if fix_result else 0
+            task_count = len(fix_result.tasks) if fix_result else 0
+            st.markdown(
+                f'<div class="fix-item fix-item-done">'
+                f'&#10003; <strong>{g.title}</strong>'
+                f' &mdash; {doc_count}文書, {task_count}タスク生成済み'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
+        st.markdown("")
+
+        # 一括ダウンロード
+        _col_l, col_center, _col_r = st.columns([1, 2, 1])
+        with col_center:
+            all_docs_md = _build_all_documents_markdown()
+            st.download_button(
+                label="全文書をダウンロード",
+                data=all_docs_md,
+                file_name="governance_documents.md",
+                mime="text/markdown",
+                use_container_width=True,
+                key="download_all_docs_autofix",
+            )
+
+        st.markdown("")
+        _col_l2, col_center2, _col_r2 = st.columns([1, 2, 1])
+        with col_center2:
+            if st.button(
+                "生成された文書を確認する",
+                type="primary",
+                use_container_width=True,
+                key="go_to_review",
+            ):
+                st.session_state.current_page = "page_gaps"
+                st.rerun()
+
+        return
+
+    # ── まだ修復していない: 修復実行
+    st.markdown(f"**{total_to_fix}件**の項目を自動修復します。")
+    st.caption("必要な方針書・チェックリスト・タスクリストを自動生成します。")
+
+    # 修復対象一覧
+    for g in non_compliant_gaps:
+        is_done = g.req_id in st.session_state.autofix_results
+        cls = "fix-item-done" if is_done else "fix-item-pending"
+        prefix = "&#10003;" if is_done else "&#9744;"
+        st.markdown(
+            f'<div class="fix-item {cls}">'
+            f'{prefix} {g.title}'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("")
+    _col_l, col_center, _col_r = st.columns([1, 2, 1])
+    with col_center:
+        if st.button(
+            "全て修復を開始する",
+            type="primary",
+            use_container_width=True,
+            key="start_autofix",
+        ):
+            _execute_autofix_all(non_compliant_gaps)
+            st.rerun()
+
+
+def _execute_autofix_all(gaps_to_fix: list) -> None:
+    """全ギャップに対してAutoFixを実行. プログレス表示付き."""
+    total = len(gaps_to_fix)
+    progress_bar = st.progress(0.0)
+    status_text = st.empty()
+    error_items: list[str] = []
+
+    engine = _get_autofix_engine()
+    org_ctx = _get_org_context()
+
+    for i, g in enumerate(gaps_to_fix):
+        if g.req_id in st.session_state.autofix_results:
+            # 既に修復済み
+            progress_bar.progress((i + 1) / total)
+            continue
+
+        status_text.markdown(f"**{i + 1}/{total}** 修復中: {g.title}")
+        try:
+            fix_result = engine.fix_requirement(g.req_id, org_ctx)
+            st.session_state.autofix_results[g.req_id] = fix_result
+        except Exception as e:
+            error_items.append(f"{g.title}: {e}")
+
+        progress_bar.progress((i + 1) / total)
+
+    st.session_state.autofix_done = True
+    progress_bar.progress(1.0)
+
+    if error_items:
+        status_text.warning(
+            f"{total - len(error_items)}/{total}件の修復が完了しました。"
+            f"\n{len(error_items)}件は手動対応が必要です:\n"
+            + "\n".join(f"- {item}" for item in error_items)
+        )
+    else:
+        status_text.success(f"{total}/{total} 修復完了！")
+
+
+def _build_all_documents_markdown() -> str:
+    """全AutoFix結果の文書をまとめたMarkdownを生成."""
+    parts: list[str] = []
+    parts.append("# AIガバナンス対応文書\n")
+    parts.append(f"組織名: {st.session_state.org_name or '未設定'}\n")
+    parts.append("---\n")
+
+    for req_id, fix_result in st.session_state.autofix_results.items():
+        parts.append(f"\n## {fix_result.requirement_title or req_id}\n")
+
+        # 文書
+        for doc in fix_result.generated_documents:
+            doc_type_label = {
+                "policy": "方針書",
+                "checklist": "チェックリスト",
+                "template": "テンプレート",
+                "procedure": "手順書",
+            }.get(doc.doc_type, doc.doc_type)
+            parts.append(f"\n### {doc_type_label}: {doc.title}\n")
+            parts.append(doc.content)
+            parts.append("\n")
+
+        # タスク
+        if fix_result.tasks:
+            parts.append("\n### タスクリスト\n")
+            for i, task in enumerate(fix_result.tasks, 1):
+                parts.append(
+                    f"{i}. **{task.title}** - 担当: {task.assignee_role} / 期限: {task.deadline_days}日以内\n"
+                )
+
+        # チェックリスト
+        if fix_result.checklist:
+            parts.append("\n### チェックリスト\n")
+            for item in fix_result.checklist:
+                parts.append(f"- [ ] {item.text}\n")
+
+        parts.append("\n---\n")
+
+    return "\n".join(parts)
+
+
 def page_gaps() -> None:
     """改善が必要な項目: ギャップ一覧と改善アクション."""
     st.header("改善が必要な項目")
@@ -927,11 +1376,11 @@ def page_gaps() -> None:
             st.rerun()
         return
 
-    # session_state初期化（AutoFix結果保持用）
-    if "autofix_results" not in st.session_state:
-        st.session_state.autofix_results = {}
-
     # サマリー
+    action_needed = _count_action_needed(gap)
+    fixed = _count_fixed()
+    marked = _count_marked_complete()
+
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("OK", f"{gap.compliant_count}件", help="十分に対応できている項目")
     col2.metric("注意", f"{gap.partial_count}件", help="一部対応できているが改善の余地がある項目")
@@ -942,22 +1391,40 @@ def page_gaps() -> None:
 
     st.markdown("---")
 
-    # 全件一括AutoFixボタン
+    # 全件一括AutoFixボタン + 一括ダウンロード
     non_compliant_gaps = [
         g for g in gap.gaps if g.status != ComplianceStatus.COMPLIANT
     ]
-    if non_compliant_gaps:
-        if st.button("全て自動修復", type="primary", help="要対応・注意の全項目に対して自動修復を実行します"):
-            with st.spinner("全項目を自動修復しています..."):
-                engine = _get_autofix_engine()
-                org_ctx = _get_org_context()
-                results = engine.fix_all_gaps(gap.gaps, org_ctx)
-                for r in results:
-                    st.session_state.autofix_results[r.requirement_id] = r
-                st.success(f"{len(results)}件の項目に対する修復文書・タスクを生成しました。")
-                st.rerun()
 
-        st.markdown("")
+    col_fix, col_dl = st.columns(2)
+    with col_fix:
+        if non_compliant_gaps:
+            not_yet_fixed = [g for g in non_compliant_gaps if g.req_id not in st.session_state.autofix_results]
+            if not_yet_fixed:
+                if st.button(
+                    "全て自動修復",
+                    type="primary",
+                    help="要対応・注意の全項目に対して自動修復を実行します",
+                    use_container_width=True,
+                ):
+                    st.session_state.current_page = "page_autofix"
+                    st.rerun()
+            else:
+                st.success(f"全{len(non_compliant_gaps)}件の修復済み")
+
+    with col_dl:
+        if st.session_state.autofix_results:
+            all_docs_md = _build_all_documents_markdown()
+            st.download_button(
+                label="全文書をダウンロード",
+                data=all_docs_md,
+                file_name="governance_documents.md",
+                mime="text/markdown",
+                use_container_width=True,
+                key="download_all_docs_gaps",
+            )
+
+    st.markdown("")
 
     # フィルタ（デフォルトは「要対応」を最初に見せる）
     status_filter = st.selectbox(
@@ -986,11 +1453,16 @@ def page_gaps() -> None:
         status_val = g.status.value
         label = _status_label(status_val)
         color = _status_color(status_val)
+        is_marked = st.session_state.marked_complete.get(g.req_id, False)
+
+        # タイトルに対応完了マーク
+        title_prefix = "&#10003; " if is_marked else ""
+        title_suffix = " [対応完了]" if is_marked else ""
 
         with st.expander(
             f"{'!' if status_val == 'non_compliant' else ''} "
-            f"**{g.title}** [{label}]",
-            expanded=(g.status == ComplianceStatus.NON_COMPLIANT),
+            f"**{g.title}** [{label}]{title_suffix}",
+            expanded=(g.status == ComplianceStatus.NON_COMPLIANT and not is_marked),
         ):
             # ステータスバッジ
             st.markdown(
@@ -1042,6 +1514,23 @@ def page_gaps() -> None:
                             fix_result = engine.fix_requirement(g.req_id, org_ctx)
                             st.session_state.autofix_results[fix_key] = fix_result
                             st.rerun()
+
+                # 「対応完了にする」ボタン
+                st.markdown("---")
+                if is_marked:
+                    st.markdown("**&#10003; 対応完了としてマーク済み**")
+                    if st.button("対応完了を取り消す", key=f"unmark_{g.req_id}"):
+                        st.session_state.marked_complete[g.req_id] = False
+                        st.rerun()
+                else:
+                    if st.button(
+                        "対応完了にする",
+                        key=f"mark_{g.req_id}",
+                        type="primary",
+                        help="この項目の対応が完了したらクリックしてください。ダッシュボードのスコアに反映されます。",
+                    ):
+                        st.session_state.marked_complete[g.req_id] = True
+                        st.rerun()
 
     # AI改善提案
     if gap.ai_recommendations:
@@ -1289,6 +1778,9 @@ def page_settings() -> None:
                     st.session_state.assessment_answers = {}
                     st.session_state.assessment_step = 0
                     st.session_state.assessment_done = False
+                    st.session_state.autofix_results = {}
+                    st.session_state.autofix_done = False
+                    st.session_state.marked_complete = {}
                     st.session_state.confirm_reset_assessment = False
                     st.success("診断データをリセットしました。")
             with c2:
@@ -1343,6 +1835,7 @@ else:
         [
             "ダッシュボード",
             "診断する",
+            "自動修復",
             "改善が必要な項目",
             "AIに質問する",
             "設定",
@@ -1356,10 +1849,11 @@ else:
 
     # ページ遷移（ボタンからの直接遷移をサポート）
     override_page = st.session_state.current_page
-    if override_page in ("page_dashboard", "page_assessment", "page_gaps", "page_chat", "page_settings"):
+    if override_page in ("page_dashboard", "page_assessment", "page_gaps", "page_chat", "page_settings", "page_autofix"):
         page_map = {
             "page_dashboard": "ダッシュボード",
             "page_assessment": "診断する",
+            "page_autofix": "自動修復",
             "page_gaps": "改善が必要な項目",
             "page_chat": "AIに質問する",
             "page_settings": "設定",
@@ -1370,6 +1864,7 @@ else:
     PAGE_MAP = {
         "ダッシュボード": page_dashboard,
         "診断する": page_assessment,
+        "自動修復": page_autofix,
         "改善が必要な項目": page_gaps,
         "AIに質問する": page_chat,
         "設定": page_settings,
