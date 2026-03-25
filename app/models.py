@@ -1118,3 +1118,63 @@ class ScorePrediction(BaseModel):
     required_actions: int = 0  # 目標到達に必要な推定アクション数
     regulatory_impact_adjustment: float = 0.0  # 規制変更による調整
     category_predictions: dict[str, float] = Field(default_factory=dict)
+
+
+# ── AutoFix ────────────────────────────────────────────────────────
+
+class DocumentStatus(str, Enum):
+    """生成文書のステータス."""
+
+    DRAFT = "draft"
+    APPROVED = "approved"
+
+
+class GeneratedDocument(BaseModel):
+    """AutoFixで生成された文書."""
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    title: str
+    content: str
+    doc_type: str  # policy / checklist / template / procedure
+    status: DocumentStatus = DocumentStatus.DRAFT
+
+
+class ChecklistItem(BaseModel):
+    """チェックリスト項目."""
+
+    text: str
+    checked: bool = False
+
+
+class AutoFixTask(BaseModel):
+    """AutoFix生成タスク."""
+
+    title: str
+    description: str = ""
+    assignee_role: str = ""
+    deadline_days: int = 30
+    depends_on: list[int] = Field(default_factory=list)
+
+
+class SelfCheckItem(BaseModel):
+    """セルフチェック質問."""
+
+    question: str
+    expected_answer: str = "yes"
+    answered: bool = False
+
+
+class AutoFixResult(BaseModel):
+    """1要件に対するAutoFix結果."""
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    requirement_id: str
+    requirement_title: str = ""
+    generated_documents: list[GeneratedDocument] = Field(default_factory=list)
+    checklist: list[ChecklistItem] = Field(default_factory=list)
+    tasks: list[AutoFixTask] = Field(default_factory=list)
+    self_check_questions: list[SelfCheckItem] = Field(default_factory=list)
+    status: str = "generated"  # generated / in_progress / completed
+    created_at: str = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )

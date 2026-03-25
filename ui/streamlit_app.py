@@ -842,6 +842,72 @@ def page_assessment() -> None:
                 st.rerun()
 
 
+def _get_autofix_engine() -> AutoFixEngine:
+    """AutoFixEngineのシングルトンを取得."""
+    from app.services.autofix import AutoFixEngine as _Engine
+    return _Engine()
+
+
+def _get_org_context() -> dict[str, str]:
+    """session_stateから組織コンテキストを取得."""
+    return {
+        "org_name": st.session_state.org_name or "貴社",
+        "industry": st.session_state.org_industry or "",
+        "size": st.session_state.org_size or "",
+    }
+
+
+def _show_autofix_result(fix_result) -> None:  # noqa: ANN001
+    """AutoFix結果を表示."""
+    # 生成された文書
+    if fix_result.generated_documents:
+        st.markdown("---")
+        st.markdown("**生成された文書:**")
+        for doc in fix_result.generated_documents:
+            doc_type_label = {
+                "policy": "方針書",
+                "checklist": "チェックリスト",
+                "template": "テンプレート",
+                "procedure": "手順書",
+            }.get(doc.doc_type, doc.doc_type)
+
+            with st.expander(f"{doc_type_label}: {doc.title}", expanded=False):
+                st.markdown(doc.content)
+                st.download_button(
+                    label=f"{doc.title} をダウンロード",
+                    data=doc.content,
+                    file_name=f"{doc.title}.md",
+                    mime="text/markdown",
+                    key=f"dl_{fix_result.requirement_id}_{doc.id}",
+                )
+                st.caption("ステータス: ドラフト（確認・編集後に正式版としてご利用ください）")
+
+    # タスクリスト
+    if fix_result.tasks:
+        st.markdown("")
+        st.markdown("**タスクリスト:**")
+        for i, task in enumerate(fix_result.tasks, 1):
+            deps = ""
+            if task.depends_on:
+                dep_names = [fix_result.tasks[d].title for d in task.depends_on if d < len(fix_result.tasks)]
+                deps = f" (前提: {', '.join(dep_names)})" if dep_names else ""
+            st.markdown(
+                f"{i}. **{task.title}**{deps}\n"
+                f"   - 担当: {task.assignee_role} / 期限: {task.deadline_days}日以内"
+            )
+
+    # セルフチェック
+    if fix_result.self_check_questions:
+        st.markdown("")
+        st.markdown("**対応完了のセルフチェック:**")
+        for sc in fix_result.self_check_questions:
+            st.checkbox(
+                sc.question,
+                value=False,
+                key=f"sc_{fix_result.requirement_id}_{sc.question[:20]}",
+            )
+
+
 def page_gaps() -> None:
     """改善が必要な項目: ギャップ一覧と改善アクション."""
     st.header("改善が必要な項目")
@@ -861,6 +927,10 @@ def page_gaps() -> None:
             st.rerun()
         return
 
+    # session_state初期化（AutoFix結果保持用）
+    if "autofix_results" not in st.session_state:
+        st.session_state.autofix_results = {}
+
     # サマリー
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("OK", f"{gap.compliant_count}件", help="十分に対応できている項目")
@@ -871,6 +941,23 @@ def page_gaps() -> None:
     col4.metric("対応率", f"{rate:.0%}")
 
     st.markdown("---")
+
+    # 全件一括AutoFixボタン
+    non_compliant_gaps = [
+        g for g in gap.gaps if g.status != ComplianceStatus.COMPLIANT
+    ]
+    if non_compliant_gaps:
+        if st.button("全て自動修復", type="primary", help="要対応・注意の全項目に対して自動修復を実行します"):
+            with st.spinner("全項目を自動修復しています..."):
+                engine = _get_autofix_engine()
+                org_ctx = _get_org_context()
+                results = engine.fix_all_gaps(gap.gaps, org_ctx)
+                for r in results:
+                    st.session_state.autofix_results[r.requirement_id] = r
+                st.success(f"{len(results)}件の項目に対する修復文書・タスクを生成しました。")
+                st.rerun()
+
+        st.markdown("")
 
     # フィルタ（デフォルトは「要対応」を最初に見せる）
     status_filter = st.selectbox(
@@ -927,12 +1014,34 @@ def page_gaps() -> None:
                     st.markdown(f"{i}. {action}")
 
             # 関連する証拠書類
-            # 要件に紐づく証拠書類の種類を表示
             req = next((r for r in all_requirements() if r.req_id == g.req_id), None)
             if req:
                 st.markdown("")
                 st.markdown("**必要な証拠書類の例:**")
                 st.caption("ポリシー文書、テスト結果、監査ログ、研修記録など")
+
+            # AutoFixボタンと結果表示
+            if g.status != ComplianceStatus.COMPLIANT:
+                st.markdown("")
+                fix_key = g.req_id
+
+                if fix_key in st.session_state.autofix_results:
+                    # 既にAutoFix実行済み
+                    st.success("自動修復済み")
+                    _show_autofix_result(st.session_state.autofix_results[fix_key])
+                else:
+                    # AutoFixボタン
+                    if st.button(
+                        "自動修復",
+                        key=f"autofix_{g.req_id}",
+                        help="この項目に必要な文書・チェックリスト・タスクを自動生成します",
+                    ):
+                        with st.spinner("自動修復を実行中..."):
+                            engine = _get_autofix_engine()
+                            org_ctx = _get_org_context()
+                            fix_result = engine.fix_requirement(g.req_id, org_ctx)
+                            st.session_state.autofix_results[fix_key] = fix_result
+                            st.rerun()
 
     # AI改善提案
     if gap.ai_recommendations:
