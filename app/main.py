@@ -1160,9 +1160,265 @@ def get_pending_approvals_count(
     return {"organization_id": organization_id, "pending_count": count}
 
 
+# ── Incident Management ──────────────────────────────────────────
+
+@app.post("/api/incidents", response_model=Incident)
+def create_incident_api(
+    data: IncidentCreate,
+    _user: TokenPayload = Depends(get_current_user),
+) -> Incident:
+    """AIインシデントを記録."""
+    from app.services.incident_management import create_incident
+    incident = create_incident(data, actor_id=_user.user_id)
+
+    ledger = get_audit_ledger()
+    ledger.append(
+        action="incident.create",
+        actor=_user.user_id,
+        resource_type="incident",
+        resource_id=incident.id,
+        details={
+            "organization_id": data.organization_id,
+            "title": data.title,
+            "severity": data.severity.value,
+            "incident_type": data.incident_type.value,
+        },
+    )
+
+    # Slack通知
+    from app.services.integrations import notify_incident
+    notify_incident(
+        data.organization_id, data.title,
+        data.severity.value, data.incident_type.value,
+    )
+
+    return incident
+
+
+@app.get("/api/incidents/{organization_id}", response_model=list[Incident])
+def list_incidents_api(
+    organization_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+    status: str = "",
+    severity: str = "",
+) -> list[Incident]:
+    """インシデント一覧を取得."""
+    from app.services.incident_management import list_incidents
+    inc_status = None
+    inc_severity = None
+    if status:
+        try:
+            inc_status = IncidentStatus(status)
+        except ValueError:
+            pass
+    if severity:
+        try:
+            inc_severity = IncidentSeverity(severity)
+        except ValueError:
+            pass
+    return list_incidents(organization_id, status=inc_status, severity=inc_severity)
+
+
+@app.get("/api/incidents/detail/{incident_id}", response_model=Incident)
+def get_incident_api(
+    incident_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> Incident:
+    """インシデントを取得."""
+    from app.services.incident_management import get_incident
+    incident = get_incident(incident_id)
+    if incident is None:
+        raise HTTPException(status_code=404, detail="Incident not found")
+    return incident
+
+
+@app.put("/api/incidents/{incident_id}", response_model=Incident)
+def update_incident_api(
+    incident_id: str,
+    update: IncidentUpdate,
+    _user: TokenPayload = Depends(get_current_user),
+) -> Incident:
+    """インシデントを更新."""
+    from app.services.incident_management import update_incident
+    incident = update_incident(incident_id, update)
+    if incident is None:
+        raise HTTPException(status_code=404, detail="Incident not found")
+
+    ledger = get_audit_ledger()
+    ledger.append(
+        action="incident.update",
+        actor=_user.user_id,
+        resource_type="incident",
+        resource_id=incident_id,
+        details={"status": incident.status.value},
+    )
+
+    return incident
+
+
+@app.get("/api/incidents/stats/{organization_id}", response_model=IncidentStats)
+def get_incident_stats_api(
+    organization_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> IncidentStats:
+    """インシデント統計を取得."""
+    from app.services.incident_management import get_incident_stats
+    return get_incident_stats(organization_id)
+
+
+@app.post("/api/incidents/rca", response_model=IncidentRCA)
+def create_rca_api(
+    data: IncidentRCACreate,
+    _user: TokenPayload = Depends(get_current_user),
+) -> IncidentRCA:
+    """根本原因分析を作成."""
+    from app.services.incident_management import create_rca
+    rca = create_rca(data)
+
+    ledger = get_audit_ledger()
+    ledger.append(
+        action="incident.rca_create",
+        actor=_user.user_id,
+        resource_type="incident_rca",
+        resource_id=rca.id,
+        details={"incident_id": data.incident_id},
+    )
+
+    return rca
+
+
+@app.get("/api/incidents/rca/{incident_id}", response_model=IncidentRCA | None)
+def get_rca_api(
+    incident_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> IncidentRCA | None:
+    """RCAを取得."""
+    from app.services.incident_management import get_rca
+    return get_rca(incident_id)
+
+
+@app.get("/api/incidents/regulatory/{organization_id}", response_model=list[Incident])
+def get_regulatory_incidents_api(
+    organization_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> list[Incident]:
+    """規制当局報告が必要なインシデントを取得."""
+    from app.services.incident_management import get_regulatory_reportable_incidents
+    return get_regulatory_reportable_incidents(organization_id)
+
+
+# ── Integration (Slack) ─────────────────────────────────────────
+
+@app.post("/api/integrations", response_model=IntegrationConfig)
+def create_integration_api(
+    data: IntegrationConfigCreate,
+    _user: TokenPayload = Depends(get_current_user),
+) -> IntegrationConfig:
+    """連携設定を作成."""
+    from app.services.integrations import create_integration_config
+    config = create_integration_config(data)
+
+    ledger = get_audit_ledger()
+    ledger.append(
+        action="integration.create",
+        actor=_user.user_id,
+        resource_type="integration_config",
+        resource_id=config.id,
+        details={
+            "organization_id": data.organization_id,
+            "integration_type": data.integration_type,
+        },
+    )
+
+    return config
+
+
+@app.get("/api/integrations/{organization_id}", response_model=list[IntegrationConfig])
+def list_integrations_api(
+    organization_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> list[IntegrationConfig]:
+    """連携設定一覧を取得."""
+    from app.services.integrations import list_integration_configs
+    return list_integration_configs(organization_id)
+
+
+@app.put("/api/integrations/{organization_id}/{integration_type}", response_model=IntegrationConfig)
+def update_integration_api(
+    organization_id: str,
+    integration_type: str,
+    update: IntegrationConfigUpdate,
+    _user: TokenPayload = Depends(get_current_user),
+) -> IntegrationConfig:
+    """連携設定を更新."""
+    from app.services.integrations import update_integration_config
+    config = update_integration_config(organization_id, integration_type, update)
+    if config is None:
+        raise HTTPException(status_code=404, detail="Integration config not found")
+    return config
+
+
+# ── Monthly Report ──────────────────────────────────────────────
+
+@app.post("/api/monthly-reports/generate", response_model=MonthlyReport)
+def generate_monthly_report_api(
+    organization_id: str,
+    year: int,
+    month: int,
+    _user: TokenPayload = Depends(get_current_user),
+) -> MonthlyReport:
+    """月次レポートを生成."""
+    from app.services.auto_report import build_monthly_report_data
+    report = build_monthly_report_data(organization_id, year, month)
+
+    ledger = get_audit_ledger()
+    ledger.append(
+        action="monthly_report.generate",
+        actor=_user.user_id,
+        resource_type="monthly_report",
+        resource_id=report.id,
+        details={
+            "organization_id": organization_id,
+            "year": year,
+            "month": month,
+        },
+    )
+
+    # Slack通知
+    from app.services.integrations import notify_monthly_report
+    notify_monthly_report(organization_id, year, month)
+
+    return report
+
+
+@app.get("/api/monthly-reports/{organization_id}", response_model=list[MonthlyReport])
+def list_monthly_reports_api(
+    organization_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> list[MonthlyReport]:
+    """月次レポート一覧を取得."""
+    from app.services.auto_report import list_monthly_reports
+    return list_monthly_reports(organization_id)
+
+
+@app.get("/api/monthly-reports/{organization_id}/{year}/{month}", response_model=MonthlyReport)
+def get_monthly_report_api(
+    organization_id: str,
+    year: int,
+    month: int,
+    _user: TokenPayload = Depends(get_current_user),
+) -> MonthlyReport:
+    """月次レポートを取得."""
+    from app.services.auto_report import get_monthly_report
+    report = get_monthly_report(organization_id, year, month)
+    if report is None:
+        raise HTTPException(status_code=404, detail="Monthly report not found")
+    return report
+
+
 # ── Health ────────────────────────────────────────────────────────
 
 @app.get("/api/health")
 def health_check() -> dict:
     """ヘルスチェック."""
-    return {"status": "ok", "service": "JPGovAI", "version": "0.3.0"}
+    return {"status": "ok", "service": "JPGovAI", "version": "0.4.0"}

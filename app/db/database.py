@@ -190,6 +190,70 @@ class ApprovalRequestRow(Base):
     updated_at = Column(String, default=lambda: datetime.now(timezone.utc).isoformat())
 
 
+class IncidentRow(Base):
+    __tablename__ = "incidents"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    organization_id = Column(String, nullable=False)
+    title = Column(String, nullable=False)
+    description = Column(Text, default="")
+    incident_type = Column(String, default="other")
+    severity = Column(String, default="medium")
+    affected_system = Column(String, default="")
+    impact_description = Column(Text, default="")
+    status = Column(String, default="open")
+    detected_by = Column(String, default="")
+    detected_at = Column(String, default=lambda: datetime.now(timezone.utc).isoformat())
+    resolved_at = Column(String, default="")
+    related_requirements_json = Column(Text, default="[]")
+    regulatory_report_required = Column(Integer, default=0)
+    regulatory_report_sent = Column(Integer, default=0)
+    created_at = Column(String, default=lambda: datetime.now(timezone.utc).isoformat())
+    updated_at = Column(String, default=lambda: datetime.now(timezone.utc).isoformat())
+
+
+class IncidentRCARow(Base):
+    __tablename__ = "incident_rcas"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    incident_id = Column(String, nullable=False)
+    root_cause = Column(Text, default="")
+    contributing_factors_json = Column(Text, default="[]")
+    corrective_actions_json = Column(Text, default="[]")
+    preventive_actions_json = Column(Text, default="[]")
+    lessons_learned = Column(Text, default="")
+    created_at = Column(String, default=lambda: datetime.now(timezone.utc).isoformat())
+
+
+class IntegrationConfigRow(Base):
+    __tablename__ = "integration_configs"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    organization_id = Column(String, nullable=False)
+    integration_type = Column(String, default="slack")
+    webhook_url = Column(String, default="")
+    enabled = Column(Integer, default=1)
+    notify_review_reminder = Column(Integer, default=1)
+    notify_approval = Column(Integer, default=1)
+    notify_incident = Column(Integer, default=1)
+    notify_score_drop = Column(Integer, default=1)
+    notify_new_gap = Column(Integer, default=1)
+    language = Column(String, default="ja")
+    created_at = Column(String, default=lambda: datetime.now(timezone.utc).isoformat())
+    updated_at = Column(String, default=lambda: datetime.now(timezone.utc).isoformat())
+
+
+class MonthlyReportRow(Base):
+    __tablename__ = "monthly_reports"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    organization_id = Column(String, nullable=False)
+    year = Column(Integer, nullable=False)
+    month = Column(Integer, nullable=False)
+    report_json = Column(Text, default="{}")
+    generated_at = Column(String, default=lambda: datetime.now(timezone.utc).isoformat())
+
+
 # ── Database Manager ──────────────────────────────────────────────
 
 class DatabaseManager:

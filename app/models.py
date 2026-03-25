@@ -106,6 +106,38 @@ class ApprovalStatus(str, Enum):
     RETURNED = "returned"  # 差し戻し
 
 
+class IncidentType(str, Enum):
+    """AIインシデント種別."""
+
+    HALLUCINATION = "hallucination"
+    BIAS = "bias"
+    DATA_LEAK = "data_leak"
+    SERVICE_OUTAGE = "service_outage"
+    SECURITY_BREACH = "security_breach"
+    PRIVACY_VIOLATION = "privacy_violation"
+    SAFETY = "safety"
+    QUALITY = "quality"
+    OTHER = "other"
+
+
+class IncidentSeverity(str, Enum):
+    """インシデント重大度."""
+
+    CRITICAL = "critical"
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+
+
+class IncidentStatus(str, Enum):
+    """インシデント対応状況."""
+
+    OPEN = "open"
+    INVESTIGATING = "investigating"
+    RESOLVED = "resolved"
+    CLOSED = "closed"
+
+
 class IndustryType(str, Enum):
     """業界分類."""
 
@@ -747,3 +779,184 @@ class ApprovalAction(BaseModel):
 
     action: ApprovalStatus  # approved / rejected / returned
     comment: str = ""
+
+
+# ── Incident Management ─────────────────────────────────────────
+
+class Incident(BaseModel):
+    """AIインシデントレコード."""
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    organization_id: str
+    title: str
+    description: str = ""
+    incident_type: IncidentType = IncidentType.OTHER
+    severity: IncidentSeverity = IncidentSeverity.MEDIUM
+    affected_system: str = ""
+    impact_description: str = ""
+    status: IncidentStatus = IncidentStatus.OPEN
+    detected_by: str = ""
+    detected_at: str = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
+    resolved_at: str = ""
+    related_requirements: list[str] = Field(default_factory=list)
+    regulatory_report_required: bool = False
+    regulatory_report_sent: bool = False
+    created_at: str = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
+    updated_at: str = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
+
+
+class IncidentCreate(BaseModel):
+    """インシデント作成リクエスト."""
+
+    organization_id: str
+    title: str
+    description: str = ""
+    incident_type: IncidentType = IncidentType.OTHER
+    severity: IncidentSeverity = IncidentSeverity.MEDIUM
+    affected_system: str = ""
+    impact_description: str = ""
+    detected_by: str = ""
+    related_requirements: list[str] = Field(default_factory=list)
+    regulatory_report_required: bool = False
+
+
+class IncidentUpdate(BaseModel):
+    """インシデント更新リクエスト."""
+
+    status: IncidentStatus | None = None
+    severity: IncidentSeverity | None = None
+    impact_description: str | None = None
+    resolved_at: str | None = None
+    regulatory_report_sent: bool | None = None
+
+
+class IncidentRCA(BaseModel):
+    """根本原因分析（RCA）."""
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    incident_id: str
+    root_cause: str = ""
+    contributing_factors: list[str] = Field(default_factory=list)
+    corrective_actions: list[str] = Field(default_factory=list)
+    preventive_actions: list[str] = Field(default_factory=list)
+    lessons_learned: str = ""
+    created_at: str = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
+
+
+class IncidentRCACreate(BaseModel):
+    """RCA作成リクエスト."""
+
+    incident_id: str
+    root_cause: str = ""
+    contributing_factors: list[str] = Field(default_factory=list)
+    corrective_actions: list[str] = Field(default_factory=list)
+    preventive_actions: list[str] = Field(default_factory=list)
+    lessons_learned: str = ""
+
+
+class IncidentStats(BaseModel):
+    """インシデント統計."""
+
+    organization_id: str
+    total_count: int = 0
+    by_severity: dict[str, int] = Field(default_factory=dict)
+    by_type: dict[str, int] = Field(default_factory=dict)
+    by_status: dict[str, int] = Field(default_factory=dict)
+    avg_resolution_hours: float = 0.0
+    open_count: int = 0
+
+
+# ── Integration Config ──────────────────────────────────────────
+
+class IntegrationConfig(BaseModel):
+    """外部連携設定."""
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    organization_id: str
+    integration_type: str = "slack"  # slack / teams / etc.
+    webhook_url: str = ""
+    enabled: bool = True
+    notify_review_reminder: bool = True
+    notify_approval: bool = True
+    notify_incident: bool = True
+    notify_score_drop: bool = True
+    notify_new_gap: bool = True
+    language: str = "ja"  # ja / en
+    created_at: str = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
+    updated_at: str = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
+
+
+class IntegrationConfigCreate(BaseModel):
+    """連携設定作成リクエスト."""
+
+    organization_id: str
+    integration_type: str = "slack"
+    webhook_url: str = ""
+    enabled: bool = True
+    language: str = "ja"
+
+
+class IntegrationConfigUpdate(BaseModel):
+    """連携設定更新リクエスト."""
+
+    webhook_url: str | None = None
+    enabled: bool | None = None
+    notify_review_reminder: bool | None = None
+    notify_approval: bool | None = None
+    notify_incident: bool | None = None
+    notify_score_drop: bool | None = None
+    notify_new_gap: bool | None = None
+    language: str | None = None
+
+
+# ── Enhanced Evidence ───────────────────────────────────────────
+
+class EvidenceFile(BaseModel):
+    """エビデンスファイル（メタデータ強化版）."""
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    organization_id: str
+    requirement_id: str
+    filename: str
+    description: str = ""
+    file_type: str = ""
+    file_path: str = ""
+    file_size: int = 0
+    file_hash: str = ""
+    uploaded_by: str = ""
+    expires_at: str = ""  # 有効期限（空=無期限）
+    uploaded_at: str = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
+
+
+# ── Monthly Report ──────────────────────────────────────────────
+
+class MonthlyReport(BaseModel):
+    """月次自動レポート."""
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    organization_id: str
+    year: int
+    month: int
+    score_summary: dict[str, Any] = Field(default_factory=dict)
+    gap_summary: dict[str, Any] = Field(default_factory=dict)
+    incident_summary: dict[str, Any] = Field(default_factory=dict)
+    evidence_coverage: float = 0.0
+    benchmark_comparison: dict[str, Any] = Field(default_factory=dict)
+    recommendations: list[str] = Field(default_factory=list)
+    generated_at: str = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )

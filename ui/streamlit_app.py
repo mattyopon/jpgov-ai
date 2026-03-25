@@ -106,7 +106,10 @@ page = st.sidebar.radio(
         "タスク管理",
         "定期レビュー",
         "承認ワークフロー",
+        "インシデント管理",
         "エビデンス管理",
+        "Slack連携設定",
+        "月次レポート",
         "レポート生成",
         "エクスポート",
         "監査証跡",
@@ -985,6 +988,100 @@ elif page == "承認ワークフロー":
                 if result:
                     st.success("承認リクエストを作成しました。")
 
+elif page == "インシデント管理":
+    st.title("AIインシデント管理")
+    st.markdown("AIインシデントの登録・追跡・統計を管理します。")
+
+    if not st.session_state.org_id:
+        st.warning("先に「組織登録」を行ってください。")
+    else:
+        tab1, tab2, tab3 = st.tabs(["インシデント一覧", "インシデント登録", "統計"])
+
+        with tab1:
+            incidents = api_get(f"/incidents/{st.session_state.org_id}")
+            if incidents:
+                for inc in incidents:
+                    sev = inc.get("severity", "medium")
+                    sev_icon = {
+                        "critical": "🔴", "high": "🟠",
+                        "medium": "🟡", "low": "🟢",
+                    }.get(sev, "⚪")
+                    status = inc.get("status", "open")
+                    with st.expander(
+                        f"{sev_icon} [{sev.upper()}] {inc.get('title', '?')} ({status})"
+                    ):
+                        st.markdown(f"**種別**: {inc.get('incident_type', '-')}")
+                        st.markdown(f"**影響システム**: {inc.get('affected_system', '-')}")
+                        st.markdown(f"**説明**: {inc.get('description', '-')}")
+                        st.markdown(f"**影響**: {inc.get('impact_description', '-')}")
+                        st.markdown(f"**検出日時**: {inc.get('detected_at', '')[:19]}")
+                        if inc.get("related_requirements"):
+                            st.markdown(f"**関連要件**: {', '.join(inc['related_requirements'])}")
+                        if inc.get("regulatory_report_required"):
+                            sent = inc.get("regulatory_report_sent", False)
+                            badge = "送信済み" if sent else "未送信"
+                            st.markdown(f"**規制報告**: 必要 ({badge})")
+            else:
+                st.info("インシデントがありません。")
+
+        with tab2:
+            with st.form("incident_form"):
+                title = st.text_input("タイトル", placeholder="チャットボットが不適切な応答を生成")
+                description = st.text_area("説明")
+                inc_type = st.selectbox(
+                    "種別",
+                    ["hallucination", "bias", "data_leak", "service_outage",
+                     "security_breach", "privacy_violation", "safety", "quality", "other"],
+                )
+                sev = st.selectbox("重大度", ["critical", "high", "medium", "low"])
+                affected = st.text_input("影響システム", placeholder="顧客対応チャットボット")
+                impact = st.text_area("影響範囲")
+                reg_required = st.checkbox("規制当局への報告が必要")
+                submitted = st.form_submit_button("登録")
+
+            if submitted and title:
+                result = api_post(
+                    "/incidents",
+                    {
+                        "organization_id": st.session_state.org_id,
+                        "title": title,
+                        "description": description,
+                        "incident_type": inc_type,
+                        "severity": sev,
+                        "affected_system": affected,
+                        "impact_description": impact,
+                        "regulatory_report_required": reg_required,
+                    },
+                )
+                if result:
+                    st.success(f"インシデントを登録しました。ID: {result['id']}")
+
+        with tab3:
+            stats = api_get(f"/incidents/stats/{st.session_state.org_id}")
+            if stats:
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("総インシデント数", stats.get("total_count", 0))
+                with col2:
+                    st.metric("未解決", stats.get("open_count", 0))
+                with col3:
+                    avg_hours = stats.get("avg_resolution_hours", 0)
+                    st.metric("平均解決時間", f"{avg_hours:.1f}h")
+
+                st.subheader("重大度別分布")
+                by_sev = stats.get("by_severity", {})
+                if by_sev:
+                    for s, c in sorted(by_sev.items()):
+                        st.markdown(f"- **{s}**: {c}件")
+
+                st.subheader("種別分布")
+                by_type = stats.get("by_type", {})
+                if by_type:
+                    for t, c in sorted(by_type.items()):
+                        st.markdown(f"- **{t}**: {c}件")
+            else:
+                st.info("統計データがありません。")
+
 elif page == "エビデンス管理":
     st.title("エビデンス管理")
     st.markdown("各要件に対するエビデンスをアップロード・管理します。")
@@ -1045,6 +1142,149 @@ elif page == "エビデンス管理":
                         rate,
                         text=f"{info.get('covered', 0)}/{info.get('total', 0)} ({rate:.0%})",
                     )
+
+elif page == "Slack連携設定":
+    st.title("Slack連携設定")
+    st.markdown("Slack Webhookによる自動通知を設定します。")
+
+    if not st.session_state.org_id:
+        st.warning("先に「組織登録」を行ってください。")
+    else:
+        configs = api_get(f"/integrations/{st.session_state.org_id}")
+        existing = None
+        if configs:
+            for c in configs:
+                if c.get("integration_type") == "slack":
+                    existing = c
+                    break
+
+        if existing:
+            st.success("Slack連携が設定されています。")
+            st.markdown(f"**Webhook URL**: {existing.get('webhook_url', '')[:30]}...")
+            st.markdown(f"**有効**: {'はい' if existing.get('enabled') else 'いいえ'}")
+            st.markdown(f"**言語**: {existing.get('language', 'ja')}")
+
+            st.subheader("通知設定")
+            with st.form("update_slack"):
+                webhook = st.text_input("Webhook URL", value=existing.get("webhook_url", ""))
+                enabled = st.checkbox("有効", value=existing.get("enabled", True))
+                lang = st.selectbox("言語", ["ja", "en"], index=0 if existing.get("language") == "ja" else 1)
+                n_review = st.checkbox("レビューリマインダー", value=existing.get("notify_review_reminder", True))
+                n_approval = st.checkbox("承認通知", value=existing.get("notify_approval", True))
+                n_incident = st.checkbox("インシデント通知", value=existing.get("notify_incident", True))
+                n_score = st.checkbox("スコア低下アラート", value=existing.get("notify_score_drop", True))
+                n_gap = st.checkbox("新規Gap通知", value=existing.get("notify_new_gap", True))
+                submitted = st.form_submit_button("更新")
+
+            if submitted:
+                result = api_put(
+                    f"/integrations/{st.session_state.org_id}/slack",
+                    {
+                        "webhook_url": webhook,
+                        "enabled": enabled,
+                        "language": lang,
+                        "notify_review_reminder": n_review,
+                        "notify_approval": n_approval,
+                        "notify_incident": n_incident,
+                        "notify_score_drop": n_score,
+                        "notify_new_gap": n_gap,
+                    },
+                )
+                if result:
+                    st.success("設定を更新しました。")
+        else:
+            st.info("Slack連携がまだ設定されていません。")
+            with st.form("create_slack"):
+                webhook = st.text_input("Slack Webhook URL", placeholder="https://hooks.slack.com/services/...")
+                lang = st.selectbox("通知言語", ["ja", "en"])
+                submitted = st.form_submit_button("設定を作成")
+
+            if submitted and webhook:
+                result = api_post(
+                    "/integrations",
+                    {
+                        "organization_id": st.session_state.org_id,
+                        "integration_type": "slack",
+                        "webhook_url": webhook,
+                        "language": lang,
+                    },
+                )
+                if result:
+                    st.success("Slack連携を設定しました。")
+
+elif page == "月次レポート":
+    st.title("月次自動レポート")
+    st.markdown("月次のスコア変動、Gap対応状況、インシデント統計を自動集約します。")
+
+    if not st.session_state.org_id:
+        st.warning("先に「組織登録」を行ってください。")
+    else:
+        tab1, tab2 = st.tabs(["レポート生成", "レポート一覧"])
+
+        with tab1:
+            col1, col2 = st.columns(2)
+            with col1:
+                year = st.number_input("年", min_value=2024, max_value=2030, value=2026)
+            with col2:
+                month = st.number_input("月", min_value=1, max_value=12, value=3)
+
+            if st.button("月次レポートを生成", type="primary"):
+                with st.spinner("レポートを生成中..."):
+                    result = api_post(
+                        f"/monthly-reports/generate?organization_id={st.session_state.org_id}"
+                        f"&year={year}&month={month}",
+                        {},
+                    )
+                if result:
+                    st.success(f"{year}年{month}月のレポートを生成しました。")
+
+                    # スコアサマリー
+                    score = result.get("score_summary", {})
+                    if score:
+                        st.subheader("スコア変動")
+                        c1, c2, c3 = st.columns(3)
+                        with c1:
+                            st.metric("現在スコア", f"{score.get('current_score', 0):.2f}")
+                        with c2:
+                            delta = score.get("delta", 0)
+                            st.metric("前回比", f"{delta:+.2f}")
+                        with c3:
+                            st.metric("トレンド", score.get("trend", "no_data"))
+
+                    # インシデント
+                    inc = result.get("incident_summary", {})
+                    if inc:
+                        st.subheader("インシデント")
+                        st.markdown(f"- 総数: {inc.get('total', 0)}")
+                        st.markdown(f"- 未解決: {inc.get('open', 0)}")
+
+                    # エビデンスカバレッジ
+                    cov = result.get("evidence_coverage", 0)
+                    st.subheader("エビデンスカバレッジ")
+                    st.progress(min(cov, 1.0), text=f"{cov:.0%}")
+
+                    # 推奨アクション
+                    recs = result.get("recommendations", [])
+                    if recs:
+                        st.subheader("推奨アクション")
+                        for r in recs:
+                            st.markdown(f"- {r}")
+
+        with tab2:
+            reports = api_get(f"/monthly-reports/{st.session_state.org_id}")
+            if reports:
+                for r in reports:
+                    with st.expander(f"{r['year']}年{r['month']}月 — {r.get('generated_at', '')[:10]}"):
+                        score = r.get("score_summary", {})
+                        st.markdown(f"**スコア**: {score.get('current_score', 'N/A')}")
+                        st.markdown(f"**エビデンスカバレッジ**: {r.get('evidence_coverage', 0):.0%}")
+                        recs = r.get("recommendations", [])
+                        if recs:
+                            st.markdown("**推奨アクション**:")
+                            for rec in recs:
+                                st.markdown(f"  - {rec}")
+            else:
+                st.info("まだ月次レポートがありません。")
 
 elif page == "レポート生成":
     st.title("レポート生成")

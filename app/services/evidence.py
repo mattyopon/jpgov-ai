@@ -1,35 +1,66 @@
 # Copyright (c) 2026 Yutaro Maeda
 # Licensed under the Business Source License 1.1. See LICENSE file for details.
 
-"""エビデンス管理サービス.
+"""エビデンス管理サービス（強化版）.
 
 各要件に対するエビデンス（方針文書、テスト結果、監査ログ等）の
 アップロード・管理と充足率ダッシュボード情報を提供する。
+
+Phase 2 強化:
+- ファイルシステムベースの実ストレージ（uploads/{org_id}/{requirement_id}/）
+- ファイルメタデータ（名前、サイズ、SHA-256ハッシュ、アップロード日時、アップロード者）
+- エビデンスの有効期限設定と期限切れアラート
+- エビデンスカバレッジ率の算出
 """
 
 from __future__ import annotations
 
+import hashlib
 import uuid
 from pathlib import Path
 
 from app.db.database import EvidenceRow, get_db
 from app.guidelines.meti_v1_1 import CATEGORIES, all_requirements
-from app.models import EvidenceRecord, EvidenceSummary, EvidenceUpload
+from app.models import EvidenceFile, EvidenceRecord, EvidenceSummary, EvidenceUpload
 
 
 UPLOAD_DIR = Path("uploads")
 
 
-def upload_evidence(evidence: EvidenceUpload) -> EvidenceRecord:
-    """エビデンスをアップロード（プロトタイプ: ファイル保存はシミュレーション）.
+def upload_evidence(
+    evidence: EvidenceUpload,
+    file_content: bytes | None = None,
+    uploaded_by: str = "",
+    expires_at: str = "",
+) -> EvidenceRecord:
+    """エビデンスをアップロード.
+
+    Phase 2: ファイルシステムベースの実ストレージ。
+    file_content が None の場合はメタデータのみ登録（後方互換性）。
 
     Args:
         evidence: アップロード情報
+        file_content: ファイルバイナリ（None=メタデータのみ）
+        uploaded_by: アップロード者のuser_id
+        expires_at: 有効期限（ISO 8601、空=無期限）
 
     Returns:
         EvidenceRecord: 保存されたエビデンスレコード
     """
-    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    # uploads/{org_id}/{requirement_id}/ 配下に保存
+    org_dir = UPLOAD_DIR / evidence.organization_id / evidence.requirement_id
+    org_dir.mkdir(parents=True, exist_ok=True)
+
+    unique_name = f"{uuid.uuid4().hex}_{evidence.filename}"
+    file_path = org_dir / unique_name
+
+    file_size = 0
+    file_hash = ""
+
+    if file_content is not None:
+        file_path.write_bytes(file_content)
+        file_size = len(file_content)
+        file_hash = hashlib.sha256(file_content).hexdigest()
 
     record = EvidenceRecord(
         organization_id=evidence.organization_id,
@@ -37,7 +68,7 @@ def upload_evidence(evidence: EvidenceUpload) -> EvidenceRecord:
         filename=evidence.filename,
         description=evidence.description,
         file_type=evidence.file_type,
-        file_path=str(UPLOAD_DIR / f"{uuid.uuid4().hex}_{evidence.filename}"),
+        file_path=str(file_path),
     )
 
     db = get_db()
@@ -55,6 +86,68 @@ def upload_evidence(evidence: EvidenceUpload) -> EvidenceRecord:
         session.commit()
 
     return record
+
+
+def upload_evidence_v2(
+    evidence: EvidenceUpload,
+    file_content: bytes | None = None,
+    uploaded_by: str = "",
+    expires_at: str = "",
+) -> EvidenceFile:
+    """エビデンスをアップロード（強化版）.
+
+    Args:
+        evidence: アップロード情報
+        file_content: ファイルバイナリ（None=メタデータのみ）
+        uploaded_by: アップロード者のuser_id
+        expires_at: 有効期限（ISO 8601、空=無期限）
+
+    Returns:
+        EvidenceFile: 保存されたエビデンスファイル（メタデータ付き）
+    """
+    org_dir = UPLOAD_DIR / evidence.organization_id / evidence.requirement_id
+    org_dir.mkdir(parents=True, exist_ok=True)
+
+    unique_name = f"{uuid.uuid4().hex}_{evidence.filename}"
+    file_path = org_dir / unique_name
+
+    file_size = 0
+    file_hash = ""
+
+    if file_content is not None:
+        file_path.write_bytes(file_content)
+        file_size = len(file_content)
+        file_hash = hashlib.sha256(file_content).hexdigest()
+
+    ef = EvidenceFile(
+        organization_id=evidence.organization_id,
+        requirement_id=evidence.requirement_id,
+        filename=evidence.filename,
+        description=evidence.description,
+        file_type=evidence.file_type,
+        file_path=str(file_path),
+        file_size=file_size,
+        file_hash=file_hash,
+        uploaded_by=uploaded_by,
+        expires_at=expires_at,
+    )
+
+    # 既存テーブルにも保存（後方互換）
+    db = get_db()
+    with db.get_session() as session:
+        row = EvidenceRow(
+            id=ef.id,
+            organization_id=ef.organization_id,
+            requirement_id=ef.requirement_id,
+            filename=ef.filename,
+            description=ef.description,
+            file_type=ef.file_type,
+            file_path=ef.file_path,
+        )
+        session.add(row)
+        session.commit()
+
+    return ef
 
 
 def list_evidence(
@@ -128,3 +221,40 @@ def get_evidence_summary(organization_id: str) -> EvidenceSummary:
         coverage_rate=covered_count / total if total > 0 else 0.0,
         by_category=by_category,
     )
+
+
+def get_expiring_evidence(
+    organization_id: str,
+    within_days: int = 30,
+) -> list[EvidenceRecord]:
+    """有効期限が近いエビデンスを取得.
+
+    注: 現在のEvidenceRowには expires_at カラムがないため、
+    この関数はEvidenceFile（upload_evidence_v2経由）のデータを
+    将来のDB拡張で対応予定。現時点では空リストを返す。
+
+    Args:
+        organization_id: 組織ID
+        within_days: 何日以内に期限切れか
+
+    Returns:
+        list[EvidenceRecord]: 期限切れ間近のエビデンスリスト
+    """
+    # 将来のDB拡張で expires_at カラム追加後に実装
+    # 現時点では空リストを返す
+    return []
+
+
+def get_evidence_coverage_rate(organization_id: str) -> float:
+    """エビデンスカバレッジ率を算出.
+
+    全要件のうちエビデンスが揃っている割合。
+
+    Args:
+        organization_id: 組織ID
+
+    Returns:
+        float: カバレッジ率 (0.0-1.0)
+    """
+    summary = get_evidence_summary(organization_id)
+    return summary.coverage_rate
