@@ -121,6 +121,10 @@ page = st.sidebar.radio(
         "API Key管理",
         "Webhook管理",
         "Citadel AI連携",
+        "AIシステム台帳",
+        "エビデンス自動収集",
+        "Integration Hub",
+        "AIアドバイザー",
         "レポート生成",
         "エクスポート",
         "監査証跡",
@@ -2033,3 +2037,267 @@ elif page == "ガイドライン参照":
                         st.markdown(f"**対応METI要件**: {', '.join(r['meti_mapping'])}")
                     if r.get("iso_mapping"):
                         st.markdown(f"**対応ISO 42001**: {', '.join(r['iso_mapping'])}")
+
+
+# ── AIシステム台帳 ──────────────────────────────────────────────
+
+elif page == "AIシステム台帳":
+    st.title("AIシステム台帳")
+    org_id = st.session_state.get("organization_id", "")
+    if not org_id:
+        st.warning("先に組織を登録してください。")
+    else:
+        tab1, tab2, tab3 = st.tabs(["ダッシュボード", "システム一覧", "新規登録"])
+
+        with tab1:
+            dash = api_get(f"/ai-registry/dashboard/{org_id}")
+            if dash:
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("総AIシステム数", dash["total_systems"])
+                c2.metric("未レビュー", dash["under_review_count"])
+                c3.metric("Shadow AI", dash["shadow_ai_count"])
+                c4.metric("平均ガバナンススコア", f"{dash['avg_governance_score']:.0%}")
+
+                if dash.get("by_risk_level"):
+                    st.subheader("リスクレベル別分布")
+                    st.bar_chart(dash["by_risk_level"])
+
+                if dash.get("by_department"):
+                    st.subheader("部門別分布")
+                    st.bar_chart(dash["by_department"])
+
+        with tab2:
+            systems = api_get(f"/ai-registry/systems/{org_id}")
+            if systems:
+                for sys in systems:
+                    risk_badge = {"high": "🔴", "limited": "🟡", "minimal": "🟢"}.get(
+                        sys["risk_level"], "⚪"
+                    )
+                    with st.expander(f"{risk_badge} {sys['name']} ({sys['status']})"):
+                        st.markdown(f"**種別**: {sys['ai_type']} | **ベンダー**: {sys.get('vendor', '-')}")
+                        st.markdown(f"**部門**: {sys.get('department', '-')} | **オーナー**: {sys.get('owner', '-')}")
+                        st.markdown(f"**目的**: {sys.get('purpose', '-')}")
+                        st.markdown(f"**ガバナンススコア**: {sys.get('governance_score', 0):.0%}")
+                        if not sys.get("it_approved"):
+                            st.warning("IT未承認（Shadow AI）")
+            else:
+                st.info("AIシステムが登録されていません。")
+
+        with tab3:
+            with st.form("register_ai_system"):
+                name = st.text_input("システム名")
+                description = st.text_area("説明")
+                ai_type = st.selectbox("種別", ["generative", "predictive", "classification", "recommendation", "other"])
+                vendor = st.text_input("ベンダー")
+                department = st.text_input("部門")
+                owner = st.text_input("オーナー")
+                purpose = st.text_input("目的")
+                data_types = st.multiselect("データ種別", ["personal", "confidential", "public"])
+                it_approved = st.checkbox("IT承認済み", value=True)
+
+                if st.form_submit_button("登録"):
+                    result = api_post("/ai-registry/systems", {
+                        "organization_id": org_id,
+                        "name": name,
+                        "description": description,
+                        "ai_type": ai_type,
+                        "vendor": vendor,
+                        "department": department,
+                        "owner": owner,
+                        "purpose": purpose,
+                        "data_types": data_types,
+                        "it_approved": it_approved,
+                    })
+                    if result:
+                        st.success(f"AIシステム「{name}」を登録しました（リスクレベル: {result.get('risk_level', '-')}）")
+
+
+# ── エビデンス自動収集 ──────────────────────────────────────────
+
+elif page == "エビデンス自動収集":
+    st.title("エビデンス自動収集")
+    org_id = st.session_state.get("organization_id", "")
+    if not org_id:
+        st.warning("先に組織を登録してください。")
+    else:
+        tab1, tab2, tab3 = st.tabs(["ダッシュボード", "コレクター設定", "収集実行"])
+
+        with tab1:
+            dash = api_get(f"/evidence-collector/dashboard/{org_id}")
+            if dash:
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("コレクター数", dash["total_collectors"])
+                c2.metric("有効", dash["active_collectors"])
+                c3.metric("収集エビデンス数", dash["total_evidence_collected"])
+                c4.metric("カバレッジ率", f"{dash['coverage_rate']:.0%}")
+
+                if dash.get("by_collector"):
+                    st.subheader("コレクター別状況")
+                    for name, info in dash["by_collector"].items():
+                        st.markdown(f"**{name}**: {'有効' if info['enabled'] else '無効'} | "
+                                    f"最終実行: {info.get('last_run', '-')} | "
+                                    f"ステータス: {info.get('last_status', '-')}")
+
+        with tab2:
+            configs = api_get(f"/evidence-collector/configs/{org_id}")
+            if configs:
+                for cfg in configs:
+                    st.markdown(f"- **{cfg['collector_type']}** ({cfg['schedule']}) "
+                                f"- {'有効' if cfg['enabled'] else '無効'}")
+            else:
+                st.info("コレクターが設定されていません。")
+
+            st.subheader("新規コレクター設定")
+            ctype = st.selectbox("コレクター種別", ["github", "aws", "jira"])
+            schedule = st.selectbox("スケジュール", ["daily", "weekly", "monthly"])
+
+            if ctype == "github":
+                token = st.text_input("GitHub Token", type="password")
+                repos = st.text_input("リポジトリ (カンマ区切り)")
+                cfg_data = {"token": token, "repos": [r.strip() for r in repos.split(",") if r.strip()]}
+            elif ctype == "aws":
+                account_id = st.text_input("AWS Account ID")
+                region = st.text_input("Region", value="ap-northeast-1")
+                cfg_data = {"aws_account_id": account_id, "region": region}
+            else:
+                jira_url = st.text_input("Jira URL")
+                api_token = st.text_input("API Token", type="password")
+                project_key = st.text_input("Project Key")
+                cfg_data = {"jira_url": jira_url, "api_token": api_token, "project_key": project_key}
+
+            if st.button("コレクター登録"):
+                result = api_post(
+                    f"/evidence-collector/configs?organization_id={org_id}"
+                    f"&collector_type={ctype}&schedule={schedule}",
+                    cfg_data,
+                )
+                if result:
+                    st.success("コレクターを登録しました。")
+
+        with tab3:
+            if st.button("全コレクターで収集実行"):
+                results = api_post(f"/evidence-collector/run-all/{org_id}", {})
+                if results:
+                    st.success(f"{len(results)}件のコレクターで収集を実行しました。")
+                    for r in results:
+                        st.markdown(f"- **{r['collector_type']}**: {r['items_collected']}件収集 "
+                                    f"({r['items_mapped']}件マッピング済み)")
+
+
+# ── Integration Hub ─────────────────────────────────────────────
+
+elif page == "Integration Hub":
+    st.title("Integration Hub - 外部ツール連携")
+    org_id = st.session_state.get("organization_id", "")
+    if not org_id:
+        st.warning("先に組織を登録してください。")
+    else:
+        tab1, tab2, tab3 = st.tabs(["ダッシュボード", "接続管理", "プロバイダー一覧"])
+
+        with tab1:
+            dash = api_get(f"/integration-hub/dashboard/{org_id}")
+            if dash:
+                c1, c2, c3 = st.columns(3)
+                c1.metric("接続中", dash["connected_count"])
+                c2.metric("エラー", dash["error_count"])
+                c3.metric("利用可能プロバイダー", dash["total_providers"])
+
+                if dash.get("by_category"):
+                    st.subheader("カテゴリ別接続状況")
+                    for cat, info in dash["by_category"].items():
+                        st.markdown(f"**{cat}**: {info['connected']}/{info['available']} 接続中")
+
+        with tab2:
+            conns = api_get(f"/integration-hub/connections/{org_id}")
+            if conns:
+                for conn in conns:
+                    status_icon = {"connected": "🟢", "error": "🔴", "disconnected": "⚪"}.get(
+                        conn["status"], "🟡"
+                    )
+                    st.markdown(f"{status_icon} **{conn['provider_id']}** - {conn['status']}")
+            else:
+                st.info("連携が設定されていません。")
+
+            st.subheader("新規連携追加")
+            providers = api_get("/integration-hub/providers")
+            if providers:
+                provider_names = {p["id"]: p["name"] for p in providers}
+                selected_provider = st.selectbox("プロバイダー", list(provider_names.keys()),
+                                                  format_func=lambda x: provider_names[x])
+                auth_type = st.selectbox("認証方式", ["webhook", "api_key", "oauth"])
+
+                if st.button("接続"):
+                    result = api_post("/integration-hub/connections", {
+                        "organization_id": org_id,
+                        "provider_id": selected_provider,
+                        "auth_type": auth_type,
+                        "subscribed_events": ["*"],
+                    })
+                    if result:
+                        st.success(f"{provider_names.get(selected_provider, selected_provider)}に接続しました。")
+
+        with tab3:
+            providers = api_get("/integration-hub/providers")
+            if providers:
+                categories = {}
+                for p in providers:
+                    cat = p["category"]
+                    if cat not in categories:
+                        categories[cat] = []
+                    categories[cat].append(p)
+
+                for cat, provs in categories.items():
+                    st.subheader(cat.upper())
+                    for p in provs:
+                        st.markdown(f"- **{p['name']}**: {p['description']}")
+
+
+# ── AIアドバイザー ──────────────────────────────────────────────
+
+elif page == "AIアドバイザー":
+    st.title("AIアドバイザー")
+    st.markdown("AIガバナンスに関する質問に、専門知識ベースでお答えします。")
+
+    org_id = st.session_state.get("organization_id", "")
+
+    # Initialize chat history
+    if "advisor_messages" not in st.session_state:
+        st.session_state.advisor_messages = []
+    if "advisor_session_id" not in st.session_state:
+        st.session_state.advisor_session_id = ""
+
+    # Display chat history
+    for msg in st.session_state.advisor_messages:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+
+    # Chat input
+    if prompt := st.chat_input("質問を入力してください..."):
+        st.session_state.advisor_messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        with st.chat_message("assistant"):
+            with st.spinner("回答を生成中..."):
+                result = api_post("/ai-advisor/chat", {
+                    "session_id": st.session_state.advisor_session_id,
+                    "organization_id": org_id or "default",
+                    "message": prompt,
+                })
+                if result:
+                    st.session_state.advisor_session_id = result.get("session_id", "")
+                    answer = result.get("message", {}).get("content", "回答を取得できませんでした。")
+                    sources = result.get("sources", [])
+                    st.markdown(answer)
+                    if sources:
+                        st.caption(f"参考: {', '.join(sources)}")
+                    st.session_state.advisor_messages.append({"role": "assistant", "content": answer})
+                else:
+                    st.error("回答の取得に失敗しました。")
+
+    # Sidebar: session management
+    st.sidebar.markdown("---")
+    if st.sidebar.button("会話をリセット"):
+        st.session_state.advisor_messages = []
+        st.session_state.advisor_session_id = ""
+        st.rerun()

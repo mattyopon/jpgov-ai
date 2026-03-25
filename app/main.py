@@ -1946,3 +1946,339 @@ def get_citadel_mapping_api(
     from app.services.citadel_integration import CitadelIntegrationService
     service = CitadelIntegrationService()
     return service.get_requirement_mapping()
+
+
+# ── AI System Registry ────────────────────────────────────────────
+
+@app.post("/api/ai-registry/systems")
+def register_ai_system_api(
+    data: dict,
+    _user: TokenPayload = Depends(get_current_user),
+) -> dict:
+    """AIシステムを台帳に登録."""
+    from app.services.ai_registry import AISystemCreate, register_ai_system
+    system = register_ai_system(AISystemCreate(**data))
+
+    ledger = get_audit_ledger()
+    ledger.append(
+        action="ai_registry.register",
+        actor=_user.user_id,
+        resource_type="ai_system",
+        resource_id=system.id,
+        details={"name": system.name, "risk_level": system.risk_level.value},
+    )
+
+    return system.model_dump()
+
+
+@app.get("/api/ai-registry/systems/{organization_id}")
+def list_ai_systems_api(
+    organization_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+    status: str = "",
+    risk_level: str = "",
+    department: str = "",
+) -> list[dict]:
+    """AIシステム一覧を取得."""
+    from app.services.ai_registry import (
+        AISystemRiskLevel,
+        AISystemStatus,
+        list_ai_systems,
+    )
+    s = None
+    r = None
+    if status:
+        try:
+            s = AISystemStatus(status)
+        except ValueError:
+            pass
+    if risk_level:
+        try:
+            r = AISystemRiskLevel(risk_level)
+        except ValueError:
+            pass
+    systems = list_ai_systems(organization_id, status=s, risk_level=r, department=department)
+    return [sys.model_dump() for sys in systems]
+
+
+@app.get("/api/ai-registry/system/{system_id}")
+def get_ai_system_api(
+    system_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> dict:
+    """AIシステムを取得."""
+    from app.services.ai_registry import get_ai_system
+    system = get_ai_system(system_id)
+    if system is None:
+        raise HTTPException(status_code=404, detail="AI System not found")
+    return system.model_dump()
+
+
+@app.put("/api/ai-registry/system/{system_id}")
+def update_ai_system_api(
+    system_id: str,
+    data: dict,
+    _user: TokenPayload = Depends(get_current_user),
+) -> dict:
+    """AIシステムを更新."""
+    from app.services.ai_registry import AISystemUpdate, update_ai_system
+    system = update_ai_system(system_id, AISystemUpdate(**data))
+    if system is None:
+        raise HTTPException(status_code=404, detail="AI System not found")
+    return system.model_dump()
+
+
+@app.delete("/api/ai-registry/system/{system_id}")
+def delete_ai_system_api(
+    system_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> dict:
+    """AIシステムを削除."""
+    from app.services.ai_registry import delete_ai_system
+    success = delete_ai_system(system_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="AI System not found")
+    return {"status": "deleted"}
+
+
+@app.get("/api/ai-registry/dashboard/{organization_id}")
+def get_ai_registry_dashboard_api(
+    organization_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> dict:
+    """AIシステム台帳ダッシュボードを取得."""
+    from app.services.ai_registry import get_registry_dashboard
+    return get_registry_dashboard(organization_id).model_dump()
+
+
+@app.get("/api/ai-registry/shadow-ai/{organization_id}")
+def detect_shadow_ai_api(
+    organization_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> list[dict]:
+    """Shadow AI（IT未承認AIシステム）を検出."""
+    from app.services.ai_registry import detect_shadow_ai
+    return [s.model_dump() for s in detect_shadow_ai(organization_id)]
+
+
+@app.get("/api/ai-registry/dependencies/{system_id}")
+def get_ai_dependencies_api(
+    system_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> dict:
+    """AIシステムの依存関係マップを取得."""
+    from app.services.ai_registry import get_dependency_map
+    dep_map = get_dependency_map(system_id)
+    if dep_map is None:
+        raise HTTPException(status_code=404, detail="AI System not found")
+    return dep_map.model_dump()
+
+
+# ── Evidence Collector ──────────────────────────────────────────
+
+@app.post("/api/evidence-collector/configs")
+def register_collector_config_api(
+    organization_id: str,
+    collector_type: str,
+    config: dict,
+    schedule: str = "weekly",
+    _user: TokenPayload = Depends(get_current_user),
+) -> dict:
+    """コレクター設定を登録."""
+    from app.services.evidence_collector import (
+        CollectorType,
+        ScheduleFrequency,
+        register_collector_config,
+    )
+    try:
+        ct = CollectorType(collector_type)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid collector type: {collector_type}")
+    try:
+        sf = ScheduleFrequency(schedule)
+    except ValueError:
+        sf = ScheduleFrequency.WEEKLY
+    cc = register_collector_config(organization_id, ct, config, sf)
+    return cc.model_dump()
+
+
+@app.get("/api/evidence-collector/configs/{organization_id}")
+def list_collector_configs_api(
+    organization_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> list[dict]:
+    """コレクター設定一覧を取得."""
+    from app.services.evidence_collector import list_collector_configs
+    return [c.model_dump() for c in list_collector_configs(organization_id)]
+
+
+@app.post("/api/evidence-collector/run/{config_id}")
+def run_collection_api(
+    config_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> dict:
+    """エビデンス収集を実行."""
+    from app.services.evidence_collector import run_collection
+    result = run_collection(config_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Collector config not found")
+    return result.model_dump()
+
+
+@app.post("/api/evidence-collector/run-all/{organization_id}")
+def run_all_collections_api(
+    organization_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> list[dict]:
+    """全コレクターで収集を実行."""
+    from app.services.evidence_collector import run_all_collections
+    results = run_all_collections(organization_id)
+    return [r.model_dump() for r in results]
+
+
+@app.get("/api/evidence-collector/dashboard/{organization_id}")
+def get_collection_dashboard_api(
+    organization_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> dict:
+    """収集率ダッシュボードを取得."""
+    from app.services.evidence_collector import get_collection_dashboard
+    return get_collection_dashboard(organization_id).model_dump()
+
+
+# ── Integration Hub ─────────────────────────────────────────────
+
+@app.get("/api/integration-hub/providers")
+def list_integration_providers_api(
+    _user: TokenPayload = Depends(get_current_user),
+    category: str = "",
+) -> list[dict]:
+    """利用可能なプロバイダー一覧を取得."""
+    from app.services.integration_hub import ProviderCategory, list_providers
+    cat = None
+    if category:
+        try:
+            cat = ProviderCategory(category)
+        except ValueError:
+            pass
+    return [p.model_dump() for p in list_providers(cat)]
+
+
+@app.post("/api/integration-hub/connections")
+def create_integration_connection_api(
+    data: dict,
+    _user: TokenPayload = Depends(get_current_user),
+) -> dict:
+    """連携接続を作成."""
+    from app.services.integration_hub import IntegrationConnectionCreate, create_connection
+    conn = create_connection(IntegrationConnectionCreate(**data))
+    return conn.model_dump()
+
+
+@app.get("/api/integration-hub/connections/{organization_id}")
+def list_integration_connections_api(
+    organization_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> list[dict]:
+    """連携接続一覧を取得."""
+    from app.services.integration_hub import list_connections
+    return [c.model_dump() for c in list_connections(organization_id)]
+
+
+@app.put("/api/integration-hub/connections/{connection_id}")
+def update_integration_connection_api(
+    connection_id: str,
+    data: dict,
+    _user: TokenPayload = Depends(get_current_user),
+) -> dict:
+    """連携接続を更新."""
+    from app.services.integration_hub import IntegrationConnectionUpdate, update_connection
+    conn = update_connection(connection_id, IntegrationConnectionUpdate(**data))
+    if conn is None:
+        raise HTTPException(status_code=404, detail="Connection not found")
+    return conn.model_dump()
+
+
+@app.delete("/api/integration-hub/connections/{connection_id}")
+def delete_integration_connection_api(
+    connection_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> dict:
+    """連携接続を削除."""
+    from app.services.integration_hub import delete_connection
+    success = delete_connection(connection_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Connection not found")
+    return {"status": "deleted"}
+
+
+@app.post("/api/integration-hub/route-event")
+def route_event_api(
+    organization_id: str,
+    event_type: str,
+    payload: dict,
+    _user: TokenPayload = Depends(get_current_user),
+) -> dict:
+    """イベントを連携先にルーティング."""
+    from app.services.integration_hub import route_event
+    return route_event(organization_id, event_type, payload).model_dump()
+
+
+@app.get("/api/integration-hub/dashboard/{organization_id}")
+def get_integration_hub_dashboard_api(
+    organization_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> dict:
+    """Integration Hubダッシュボードを取得."""
+    from app.services.integration_hub import get_hub_dashboard
+    return get_hub_dashboard(organization_id).model_dump()
+
+
+# ── AI Advisor (Chatbot) ───────────────────────────────────────
+
+@app.post("/api/ai-advisor/chat")
+def ai_advisor_chat_api(
+    data: dict,
+    _user: TokenPayload = Depends(get_current_user),
+) -> dict:
+    """AIアドバイザーにメッセージを送信."""
+    from app.services.ai_advisor import ChatRequest, chat
+    response = chat(ChatRequest(**data))
+    return response.model_dump()
+
+
+@app.get("/api/ai-advisor/sessions/{organization_id}")
+def list_chat_sessions_api(
+    organization_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+    user_id: str = "",
+) -> list[dict]:
+    """チャットセッション一覧を取得."""
+    from app.services.ai_advisor import list_sessions
+    return [s.model_dump() for s in list_sessions(organization_id, user_id)]
+
+
+@app.get("/api/ai-advisor/session/{session_id}")
+def get_chat_session_api(
+    session_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> dict:
+    """チャットセッションを取得."""
+    from app.services.ai_advisor import get_session
+    session = get_session(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Chat session not found")
+    return session.model_dump()
+
+
+@app.delete("/api/ai-advisor/session/{session_id}")
+def delete_chat_session_api(
+    session_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> dict:
+    """チャットセッションを削除."""
+    from app.services.ai_advisor import delete_session
+    success = delete_session(session_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Chat session not found")
+    return {"status": "deleted"}
