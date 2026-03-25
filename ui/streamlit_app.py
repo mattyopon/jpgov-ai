@@ -1,10 +1,10 @@
 # Copyright (c) 2026 Yutaro Maeda
 # Licensed under the Business Source License 1.1. See LICENSE file for details.
 
-"""Streamlit UI for JPGovAI - AI Governance統合管理プラットフォーム.
+"""Streamlit UI for JPGovAI - AIガバナンス診断ツール.
 
-スタンドアロン版: FastAPIバックエンドを使わず、app/services/のPython関数を直接呼び出す。
-Streamlit Cloudで動作可能。
+一般ユーザー向けに設計されたUI。初回はオンボーディングフローを表示し、
+診断完了後はダッシュボードを表示する。
 
 使い方:
     streamlit run ui/streamlit_app.py
@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import streamlit as st
 
 st.set_page_config(
-    page_title="JPGovAI - AI Governance統合管理",
+    page_title="AIガバナンス診断 - JPGovAI",
     page_icon="\U0001f3db\ufe0f",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -35,26 +35,20 @@ get_db()
 
 # ── サービスインポート ─────────────────────────────────────────────
 from app.guidelines.meti_v1_1 import ASSESSMENT_QUESTIONS, CATEGORIES, all_requirements
-from app.models import AnswerItem, ComplianceStatus, EvidenceUpload
+from app.models import AnswerItem, ComplianceStatus
 from app.services.assessment import run_assessment
 from app.services.ai_advisor import ChatRequest, chat
 from app.services.ai_registry import (
     AISystemCreate,
-    AISystemType,
-    get_registry_dashboard,
     list_ai_systems,
     register_ai_system,
 )
-from app.services.dashboard import build_multi_regulation_dashboard
-from app.services.evidence import get_evidence_summary, list_evidence, upload_evidence
 from app.services.gap_analysis import run_gap_analysis
-from app.services.iso_check import run_iso_check
-from app.services.report_gen import generate_report
 
 
 # ── ユーティリティ ─────────────────────────────────────────────────
 
-def _run_async(coro):
+def _run_async(coro):  # noqa: ANN001, ANN202
     """asyncio コルーチンを同期的に実行するヘルパー."""
     try:
         loop = asyncio.get_event_loop()
@@ -67,30 +61,31 @@ def _run_async(coro):
         return asyncio.run(coro)
 
 
-def _init_session_state():
-    """session_stateの初期化."""
-    defaults = {
-        "organization_id": "org-default",
-        "organization_name": "デモ組織",
-        "organization_industry": "IT・通信",
-        "organization_size": "medium",
-        "assessment_result": None,
-        "gap_result": None,
-        "iso_result": None,
-        "chat_session_id": "",
-        "chat_messages": [],
-        "assessment_answers": {},
-        "assessment_step": 0,
-    }
-    for key, val in defaults.items():
-        if key not in st.session_state:
-            st.session_state[key] = val
+# ── session_state 初期化 ──────────────────────────────────────────
 
-
-_init_session_state()
+defaults = {
+    "onboarded": False,
+    "org_name": "",
+    "org_industry": "",
+    "org_size": "",
+    "org_ai_usage": "",
+    "organization_id": "org-default",
+    "assessment_answers": {},
+    "assessment_step": 0,
+    "assessment_done": False,
+    "assessment_result": None,
+    "gap_result": None,
+    "chat_history": [],
+    "chat_session_id": "",
+    "current_page": None,
+}
+for k, v in defaults.items():
+    if k not in st.session_state:
+        st.session_state[k] = v
 
 
 # ── カスタムCSS ──────────────────────────────────────────────────
+
 st.markdown("""
 <style>
     /* メトリクスカード */
@@ -104,42 +99,112 @@ st.markdown("""
     section[data-testid="stSidebar"] > div {
         padding-top: 1rem;
     }
-    /* テーブルスタイル */
-    .stDataFrame {
+    /* ウェルカムカード */
+    .welcome-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 16px;
+        padding: 40px;
+        color: white;
+        text-align: center;
+        margin-bottom: 24px;
+    }
+    .welcome-card h1 {
+        color: white;
+        font-size: 2em;
+        margin-bottom: 8px;
+    }
+    .welcome-card p {
+        color: rgba(255,255,255,0.9);
+        font-size: 1.1em;
+    }
+    /* ステップカード */
+    .step-card {
+        background: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 12px;
+        padding: 24px;
+        text-align: center;
+        height: 100%;
+    }
+    .step-card h3 {
+        margin-top: 8px;
+    }
+    /* スコアゲージ */
+    .score-gauge {
+        text-align: center;
+        padding: 20px;
+    }
+    .score-gauge .score-number {
+        font-size: 3em;
+        font-weight: bold;
+        line-height: 1;
+    }
+    .score-gauge .score-label {
+        font-size: 1.1em;
+        color: #6c757d;
+        margin-top: 4px;
+    }
+    /* ギャップカード */
+    .gap-card {
         border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 8px;
+        border-left: 4px solid;
+    }
+    .gap-card-red { border-left-color: #dc3545; background: #fff5f5; }
+    .gap-card-yellow { border-left-color: #ffc107; background: #fffdf0; }
+    .gap-card-green { border-left-color: #28a745; background: #f0fff4; }
+    /* 質問ヘルプテキスト */
+    .question-help {
+        background: #e8f4fd;
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin-bottom: 16px;
+        font-size: 0.9em;
+        color: #0c5460;
+    }
+    /* アクションカード */
+    .action-card {
+        background: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 12px;
+    }
+    /* 空状態 */
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        color: #6c757d;
+    }
+    .empty-state h3 {
+        color: #495057;
     }
 </style>
 """, unsafe_allow_html=True)
 
 
-# ── サイドバー ────────────────────────────────────────────────────
+# ── ヘルパー関数 ─────────────────────────────────────────────────
 
-st.sidebar.title("JPGovAI")
-st.sidebar.caption("AI Governance統合管理")
-st.sidebar.markdown("---")
-
-page = st.sidebar.radio(
-    "ナビゲーション",
-    [
-        "\U0001f4ca ダッシュボード",
-        "\U0001f4cb 診断 (Self-Assessment)",
-        "\U0001f50d ギャップ分析",
-        "\U0001f916 AIシステム台帳",
-        "\U0001f4c2 エビデンス管理",
-        "\U0001f4c4 レポート",
-        "\U0001f4ac AIアドバイザー",
-        "\u2699\ufe0f 設定",
-    ],
-    label_visibility="collapsed",
-)
-
-st.sidebar.markdown("---")
-st.sidebar.caption(f"組織: {st.session_state.organization_name}")
+def _score_color(score: float, max_score: float = 4.0) -> str:
+    """スコアに応じた色を返す."""
+    ratio = score / max_score if max_score > 0 else 0
+    if ratio >= 0.75:
+        return "#28a745"
+    if ratio >= 0.5:
+        return "#ffc107"
+    return "#dc3545"
 
 
-# ══════════════════════════════════════════════════════════════════
-# ページ関数
-# ══════════════════════════════════════════════════════════════════
+def _status_label(status: str) -> str:
+    """ステータスの日本語ラベル."""
+    labels = {
+        "compliant": "OK",
+        "partial": "注意",
+        "non_compliant": "要対応",
+        "not_assessed": "未評価",
+    }
+    return labels.get(status, status)
 
 
 def _status_color(status: str) -> str:
@@ -153,204 +218,218 @@ def _status_color(status: str) -> str:
     return colors.get(status, "#6c757d")
 
 
-def _status_label_ja(status: str) -> str:
-    """ステータスの日本語ラベル."""
-    labels = {
-        "compliant": "充足",
-        "partial": "部分充足",
-        "non_compliant": "未充足",
-        "not_assessed": "未評価",
-    }
-    return labels.get(status, status)
-
-
 def _maturity_label(level: int) -> str:
-    """成熟度レベルのラベル."""
+    """成熟度レベルの分かりやすいラベル."""
     labels = {
-        1: "Lv.1 初期",
-        2: "Lv.2 反復可能",
-        3: "Lv.3 定義済み",
-        4: "Lv.4 管理",
-        5: "Lv.5 最適化",
+        1: "始めたばかり",
+        2: "基本ができている",
+        3: "体制が整っている",
+        4: "しっかり管理できている",
+        5: "継続的に改善している",
     }
-    return labels.get(level, f"Lv.{level}")
+    return labels.get(level, f"レベル{level}")
 
 
-# ── 1. ダッシュボード ──────────────────────────────────────────────
+# 質問のヘルプテキスト（何を聞いているかの簡単な説明）
+QUESTION_HELP: dict[str, str] = {
+    "Q01": "AIが出した判断を、人間がチェックする仕組みがあるかを確認します。",
+    "Q02": "AIが作る文章やデータが正しいか確認する方法があるかを聞いています。",
+    "Q03": "AIのリスク（危険性）をどの程度把握しているかを確認します。",
+    "Q04": "AIの学習に使うデータの品質を管理しているかを聞いています。",
+    "Q05": "AIに問題が起きたとき、安全に止める手順があるかを確認します。",
+    "Q06": "AIが特定の人を不当に差別していないかチェックしているかを聞いています。",
+    "Q07": "差別的な結果が見つかったとき、直す手順があるかを確認します。",
+    "Q08": "AIで個人情報をどう扱うかのルールを決めているかを聞いています。",
+    "Q09": "AIを導入する前に、プライバシーへの影響を調べているかを確認します。",
+    "Q10": "AIへのサイバー攻撃に対する防御策があるかを聞いています。",
+    "Q11": "セキュリティ問題が起きたときの対応体制を確認します。",
+    "Q12": "AIを使っていることを関係者にきちんと伝えているかを聞いています。",
+    "Q13": "AIがなぜその判断をしたか説明できるかを確認します。",
+    "Q14": "AIガバナンスの責任者がいるかを聞いています。",
+    "Q15": "AIを適切に管理するための方針や体制があるかを確認します。",
+    "Q16": "従業員にAIに関する教育を行っているかを聞いています。",
+    "Q17": "AIを使う人に、正しい使い方を伝えているかを確認します。",
+    "Q18": "AIの利用が公正な競争を妨げていないかを聞いています。",
+    "Q19": "AIを使って新しい価値を生み出す取り組みがあるかを確認します。",
+    "Q20": "AIに関する決定や実施の記録を残しているかを聞いています。",
+    "Q21": "AIをどのような用途で使っているかを確認します。リスクの高さに関わります。",
+    "Q22": "AIが扱うデータの種類を確認します。個人情報を含むかが重要です。",
+    "Q23": "外部のAIサービスを使うときのセキュリティ管理について聞いています。",
+    "Q24": "AIシステムの仕様や性能をきちんと文書にしているかを確認します。",
+    "Q25": "AIに関する契約やサービス品質の取り決めがあるかを聞いています。",
+}
 
-def page_dashboard():
-    st.header("ダッシュボード")
 
-    assessment = st.session_state.assessment_result
-    gap = st.session_state.gap_result
+# ══════════════════════════════════════════════════════════════════
+# オンボーディングフロー
+# ══════════════════════════════════════════════════════════════════
 
-    if assessment is None:
-        st.info("診断がまだ実行されていません。サイドバーから「診断」を実行してください。")
-        # デモ用のプレースホルダ
-        col1, col2, col3, col4 = st.columns(4)
-        col1.metric("成熟度スコア", "---", help="診断実行後に表示されます")
-        col2.metric("全体スコア", "---")
-        col3.metric("要件数", "---")
-        col4.metric("充足率", "---")
-        return
+def show_welcome() -> None:
+    """ウェルカム画面を表示."""
+    st.markdown("""
+    <div class="welcome-card">
+        <h1>AIガバナンス診断へようこそ</h1>
+        <p>3ステップで、あなたの組織のAI管理状況を診断します</p>
+    </div>
+    """, unsafe_allow_html=True)
 
-    # ── メインメトリクス
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3 = st.columns(3)
 
-    maturity = assessment.maturity_level
-    col1.metric(
-        "成熟度レベル",
-        _maturity_label(maturity),
-        help="1(初期)〜5(最適化)の5段階",
+    with col1:
+        st.markdown("""
+        <div class="step-card">
+            <div style="font-size:2em">1</div>
+            <h3>組織情報を入力</h3>
+            <p>業種・規模・AI利用状況を教えてください</p>
+            <p style="color:#6c757d;font-size:0.9em">約30秒</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col2:
+        st.markdown("""
+        <div class="step-card">
+            <div style="font-size:2em">2</div>
+            <h3>25問の診断に回答</h3>
+            <p>現在のAI管理状況について答えてください</p>
+            <p style="color:#6c757d;font-size:0.9em">約10分</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col3:
+        st.markdown("""
+        <div class="step-card">
+            <div style="font-size:2em">3</div>
+            <h3>結果を確認</h3>
+            <p>スコアと改善ポイントがすぐ分かります</p>
+            <p style="color:#6c757d;font-size:0.9em">すぐ表示</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("")
+    st.markdown("")
+
+    _col_l, col_center, _col_r = st.columns([1, 2, 1])
+    with col_center:
+        if st.button("始める", type="primary", use_container_width=True):
+            st.session_state.current_page = "onboarding_org"
+            st.rerun()
+
+
+def show_onboarding_org() -> None:
+    """Step 1: 組織情報入力."""
+    st.markdown("### Step 1 / 3: 組織情報を入力")
+    st.caption("あなたの組織について教えてください。診断結果の精度が上がります。")
+
+    st.markdown("")
+
+    org_name = st.text_input(
+        "組織名",
+        value=st.session_state.org_name,
+        placeholder="例: 株式会社サンプル",
     )
-    col2.metric(
-        "全体スコア",
-        f"{assessment.overall_score:.2f} / 4.00",
+
+    org_industry = st.selectbox(
+        "業種",
+        ["", "IT・通信", "金融・保険", "製造", "医療・ヘルスケア", "小売・EC", "公共・行政", "教育", "その他"],
+        index=["", "IT・通信", "金融・保険", "製造", "医療・ヘルスケア", "小売・EC", "公共・行政", "教育", "その他"].index(
+            st.session_state.org_industry
+        ) if st.session_state.org_industry in ["", "IT・通信", "金融・保険", "製造", "医療・ヘルスケア", "小売・EC", "公共・行政", "教育", "その他"] else 0,
+        help="業種によって重要な対応項目が変わります",
     )
 
-    if gap:
-        total = gap.total_requirements
-        compliant = gap.compliant_count
-        rate = compliant / total if total > 0 else 0
-        col3.metric("要件充足", f"{compliant}/{total}")
-        col4.metric("充足率", f"{rate:.0%}")
-    else:
-        col3.metric("要件充足", "---")
-        col4.metric("充足率", "---")
+    org_size = st.selectbox(
+        "従業員数",
+        ["", "small", "medium", "large", "enterprise"],
+        format_func=lambda v: {
+            "": "選択してください",
+            "small": "50名以下",
+            "medium": "50〜300名",
+            "large": "300〜1,000名",
+            "enterprise": "1,000名以上",
+        }.get(v, v),
+        index=["", "small", "medium", "large", "enterprise"].index(
+            st.session_state.org_size
+        ) if st.session_state.org_size in ["", "small", "medium", "large", "enterprise"] else 0,
+    )
 
-    st.markdown("---")
+    org_ai_usage = st.selectbox(
+        "AIの利用状況",
+        ["", "exploring", "piloting", "production", "scaling"],
+        format_func=lambda v: {
+            "": "選択してください",
+            "exploring": "検討・情報収集中",
+            "piloting": "一部で試験的に利用中",
+            "production": "本番運用している",
+            "scaling": "複数部門で本格運用している",
+        }.get(v, v),
+        help="現在のAI活用のステージを選んでください",
+    )
 
-    # ── 成熟度ゲージ（プログレスバー）
-    st.subheader("成熟度スコア")
-    score_pct = assessment.overall_score / 4.0
-    st.progress(min(score_pct, 1.0))
-    st.caption(f"スコア {assessment.overall_score:.2f} / 4.00 ({_maturity_label(maturity)})")
+    st.markdown("")
 
-    st.markdown("---")
-
-    # ── 3規制準拠サマリー
-    st.subheader("規制準拠状況")
-
-    if gap:
-        try:
-            iso_result = st.session_state.iso_result
-            if iso_result is None:
-                iso_result = run_iso_check(gap)
-                st.session_state.iso_result = iso_result
-
-            dashboard = build_multi_regulation_dashboard(
-                st.session_state.organization_id,
-                gap,
-                iso_result,
-            )
-
-            reg_cols = st.columns(3)
-            regulations = [
-                ("METI AI事業者ガイドライン", dashboard.meti_status),
-                ("ISO 42001", dashboard.iso_status),
-                ("AI推進法", dashboard.act_status),
-            ]
-            for col, (name, status) in zip(reg_cols, regulations):
-                with col:
-                    if status:
-                        rate = status.compliance_rate
-                        color = "#28a745" if rate >= 0.7 else "#ffc107" if rate >= 0.4 else "#dc3545"
-                        st.markdown(f"**{name}**")
-                        st.progress(min(rate, 1.0))
-                        st.markdown(
-                            f"<span style='color:{color};font-size:1.2em;font-weight:bold'>"
-                            f"{rate:.0%}</span> "
-                            f"({status.compliant_count}/{status.total_requirements}件 充足)",
-                            unsafe_allow_html=True,
-                        )
-                    else:
-                        st.markdown(f"**{name}**")
-                        st.caption("データなし")
-
-        except Exception as e:
-            st.warning(f"規制ダッシュボードの生成中にエラー: {e}")
-
-    st.markdown("---")
-
-    # ── カテゴリ別スコア
-    st.subheader("カテゴリ別スコア")
-    for cs in assessment.category_scores:
-        col_a, col_b = st.columns([3, 1])
-        col_a.markdown(f"**{cs.category_id}: {cs.category_title}**")
-        col_b.markdown(f"{cs.score:.2f} / 4.00 ({_maturity_label(cs.maturity_level)})")
-        st.progress(min(cs.score / 4.0, 1.0))
+    col_back, col_next = st.columns(2)
+    with col_back:
+        if st.button("戻る"):
+            st.session_state.current_page = None
+            st.rerun()
+    with col_next:
+        if st.button("次へ: 診断を始める", type="primary"):
+            if not org_industry or not org_size:
+                st.warning("業種と従業員数を選択してください。")
+            else:
+                st.session_state.org_name = org_name if org_name else "未設定"
+                st.session_state.org_industry = org_industry
+                st.session_state.org_size = org_size
+                st.session_state.org_ai_usage = org_ai_usage if org_ai_usage else "exploring"
+                st.session_state.current_page = "onboarding_assessment"
+                st.session_state.assessment_step = 0
+                st.rerun()
 
 
-# ── 2. 診断 ────────────────────────────────────────────────────────
-
-def page_assessment():
-    st.header("自己診断 (Self-Assessment)")
-    st.caption("25問のアンケートに回答し、AI Governance成熟度を評価します")
-
+def show_onboarding_assessment() -> None:
+    """Step 2: 25問の診断."""
     questions = ASSESSMENT_QUESTIONS
     total_q = len(questions)
     step = st.session_state.assessment_step
 
-    if step >= total_q:
-        # 全問回答済み → 結果表示/診断実行
-        st.success("全25問の回答が完了しました!")
-
-        if st.button("診断を実行", type="primary"):
-            answers = []
-            for q in questions:
-                idx = st.session_state.assessment_answers.get(q.question_id, 0)
-                answers.append(AnswerItem(question_id=q.question_id, selected_index=idx))
-
-            try:
-                result = run_assessment(st.session_state.organization_id, answers)
-                st.session_state.assessment_result = result
-
-                # ギャップ分析も自動実行
-                gap = _run_async(run_gap_analysis(result))
-                st.session_state.gap_result = gap
-                st.session_state.iso_result = None  # リセット
-
-                st.success(f"診断完了! 成熟度: {_maturity_label(result.maturity_level)} (スコア: {result.overall_score:.2f})")
-                st.balloons()
-            except Exception as e:
-                st.error(f"診断実行エラー: {e}")
-
-        if st.button("回答をやり直す"):
-            st.session_state.assessment_step = 0
-            st.session_state.assessment_answers = {}
-            st.rerun()
-
-        # 現在の回答サマリー
-        if st.session_state.assessment_result:
-            result = st.session_state.assessment_result
-            st.markdown("---")
-            st.subheader("診断結果")
-            col1, col2 = st.columns(2)
-            col1.metric("成熟度レベル", _maturity_label(result.maturity_level))
-            col2.metric("全体スコア", f"{result.overall_score:.2f} / 4.00")
-
-            for cs in result.category_scores:
-                st.markdown(f"**{cs.category_id}: {cs.category_title}** — {cs.score:.2f} / 4.00")
-                st.progress(min(cs.score / 4.0, 1.0))
-        return
-
-    # ── ステップバイステップ質問表示
-    q = questions[step]
+    st.markdown("### Step 2 / 3: 診断")
 
     # プログレスバー
-    st.progress(step / total_q)
-    st.caption(f"質問 {step + 1} / {total_q}")
+    progress_ratio = step / total_q
+    st.progress(progress_ratio)
+    st.caption(f"{step} / {total_q} 問回答済み")
+
+    if step >= total_q:
+        # 全問回答済み → 結果算出
+        _run_assessment_and_show_result()
+        return
+
+    q = questions[step]
 
     # カテゴリ表示
     cat_title = next((c.title for c in CATEGORIES if c.category_id == q.category_id), q.category_id)
-    st.markdown(f"**カテゴリ: {cat_title}**")
+    st.markdown(f"**{cat_title}**")
 
-    st.markdown(f"### Q{step + 1}. {q.text}")
+    # 質問テキスト
+    st.markdown(f"#### Q{step + 1}. {q.text}")
 
-    # 回答選択
+    # ヘルプテキスト
+    help_text = QUESTION_HELP.get(q.question_id, "")
+    if help_text:
+        st.markdown(f'<div class="question-help">{help_text}</div>', unsafe_allow_html=True)
+
+    # 回答ラベルを分かりやすく
+    answer_labels = []
+    for i, opt in enumerate(q.options):
+        level_hint = ["できていない", "一部できている", "検討中・策定中", "ほぼできている", "十分にできている"]
+        if i < len(level_hint):
+            answer_labels.append(f"{opt}")
+        else:
+            answer_labels.append(opt)
+
     current_answer = st.session_state.assessment_answers.get(q.question_id, 0)
     selected = st.radio(
-        "回答を選択してください",
+        "回答を選んでください",
         range(len(q.options)),
         format_func=lambda i: q.options[i],
         index=current_answer,
@@ -359,16 +438,26 @@ def page_assessment():
     )
     st.session_state.assessment_answers[q.question_id] = selected
 
-    # ナビゲーションボタン
-    col_prev, col_next = st.columns(2)
+    # ナビゲーション
+    st.markdown("")
+    col_prev, col_save, col_next = st.columns([1, 1, 1])
+
     with col_prev:
         if step > 0:
-            if st.button("\u2190 前の質問"):
+            if st.button("前の質問へ"):
                 st.session_state.assessment_step = step - 1
                 st.rerun()
+        else:
+            if st.button("組織情報に戻る"):
+                st.session_state.current_page = "onboarding_org"
+                st.rerun()
+
+    with col_save:
+        st.caption("回答は自動保存されます")
+
     with col_next:
         if step < total_q - 1:
-            if st.button("次の質問 \u2192", type="primary"):
+            if st.button("次の質問へ", type="primary"):
                 st.session_state.assessment_step = step + 1
                 st.rerun()
         else:
@@ -377,360 +466,491 @@ def page_assessment():
                 st.rerun()
 
 
-# ── 3. ギャップ分析 ──────────────────────────────────────────────
+def _run_assessment_and_show_result() -> None:
+    """診断を実行して結果を表示."""
+    st.markdown("### Step 3 / 3: 診断結果")
 
-def page_gap_analysis():
-    st.header("ギャップ分析")
+    # まだ結果がない場合は診断実行
+    if st.session_state.assessment_result is None:
+        with st.spinner("診断しています..."):
+            try:
+                questions = ASSESSMENT_QUESTIONS
+                answers = []
+                for q in questions:
+                    idx = st.session_state.assessment_answers.get(q.question_id, 0)
+                    answers.append(AnswerItem(question_id=q.question_id, selected_index=idx))
 
+                result = run_assessment(st.session_state.organization_id, answers)
+                st.session_state.assessment_result = result
+
+                gap = _run_async(run_gap_analysis(result))
+                st.session_state.gap_result = gap
+                st.session_state.assessment_done = True
+            except Exception as e:
+                st.error(f"診断中にエラーが発生しました。もう一度お試しください。\n詳細: {e}")
+                if st.button("やり直す"):
+                    st.session_state.assessment_step = 0
+                    st.session_state.assessment_result = None
+                    st.rerun()
+                return
+
+    result = st.session_state.assessment_result
     gap = st.session_state.gap_result
 
-    if gap is None:
-        st.info("先に「診断」を実行してください。診断結果を元にギャップ分析を行います。")
-        return
+    # スコア表示
+    score = result.overall_score
+    color = _score_color(score)
 
-    # ── サマリー
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("充足", gap.compliant_count, help="要件を満たしている")
-    col2.metric("部分充足", gap.partial_count, help="一部対応済み")
-    col3.metric("未充足", gap.non_compliant_count, help="対応が必要")
-    col4.metric(
-        "充足率",
-        f"{gap.compliant_count / gap.total_requirements:.0%}" if gap.total_requirements > 0 else "---",
+    st.markdown(
+        f'<div class="score-gauge">'
+        f'<div class="score-number" style="color:{color}">{score:.1f}</div>'
+        f'<div class="score-label">/ 4.0 ({_maturity_label(result.maturity_level)})</div>'
+        f'</div>',
+        unsafe_allow_html=True,
     )
 
-    st.markdown("---")
-
-    # ── フィルタ
-    filter_col1, filter_col2 = st.columns(2)
-    with filter_col1:
-        status_filter = st.selectbox(
-            "ステータスで絞り込み",
-            ["すべて", "未充足", "部分充足", "充足"],
-        )
-    with filter_col2:
-        cat_options = ["すべて"] + [f"{c.category_id}: {c.title}" for c in CATEGORIES]
-        cat_filter = st.selectbox("カテゴリで絞り込み", cat_options)
-
-    # フィルタ適用
-    filtered_gaps = gap.gaps
-    if status_filter == "未充足":
-        filtered_gaps = [g for g in filtered_gaps if g.status == ComplianceStatus.NON_COMPLIANT]
-    elif status_filter == "部分充足":
-        filtered_gaps = [g for g in filtered_gaps if g.status == ComplianceStatus.PARTIAL]
-    elif status_filter == "充足":
-        filtered_gaps = [g for g in filtered_gaps if g.status == ComplianceStatus.COMPLIANT]
-
-    if cat_filter != "すべて":
-        cat_id = cat_filter.split(":")[0].strip()
-        filtered_gaps = [g for g in filtered_gaps if g.category_id == cat_id]
-
-    # ── ギャップ一覧
-    st.subheader(f"要件一覧 ({len(filtered_gaps)}件)")
-
-    for g in filtered_gaps:
-        color = _status_color(g.status.value)
-        label = _status_label_ja(g.status.value)
-        priority_icon = {"high": "\U0001f534", "medium": "\U0001f7e1", "low": "\U0001f7e2"}.get(g.priority, "")
-
-        with st.expander(
-            f"{priority_icon} **{g.req_id}** {g.title} — "
-            f":{label}  (スコア: {g.current_score:.2f})",
-            expanded=(g.status == ComplianceStatus.NON_COMPLIANT),
-        ):
-            st.markdown(
-                f"<span style='background-color:{color};color:white;padding:2px 8px;"
-                f"border-radius:4px;font-size:0.85em'>{label}</span>"
-                f" 優先度: **{g.priority}** | スコア: **{g.current_score:.2f}** / 4.00",
-                unsafe_allow_html=True,
-            )
-            if g.gap_description:
-                st.markdown(f"> {g.gap_description}")
-            if g.improvement_actions:
-                st.markdown("**改善アクション:**")
-                for action in g.improvement_actions:
-                    st.markdown(f"- {action}")
-
-    # ── AI改善提案
-    if gap.ai_recommendations:
-        st.markdown("---")
-        st.subheader("AI改善提案")
-        st.markdown(gap.ai_recommendations)
-
-
-# ── 4. AIシステム台帳 ──────────────────────────────────────────────
-
-def page_ai_registry():
-    st.header("AIシステム台帳")
-
-    org_id = st.session_state.organization_id
-
-    # ── 新規登録フォーム
-    with st.expander("新規AIシステム登録", expanded=False):
-        with st.form("register_ai_system"):
-            name = st.text_input("システム名*", placeholder="例: 社内チャットボット")
-            description = st.text_area("説明", placeholder="システムの概要を記載")
-            col1, col2 = st.columns(2)
-            with col1:
-                ai_type = st.selectbox(
-                    "種別",
-                    [t.value for t in AISystemType],
-                    format_func=lambda v: {
-                        "generative": "生成AI",
-                        "predictive": "予測",
-                        "classification": "分類",
-                        "recommendation": "推薦",
-                        "other": "その他",
-                    }.get(v, v),
-                )
-                department = st.text_input("所管部門", placeholder="例: 情報システム部")
-                vendor = st.text_input("ベンダー", placeholder="例: OpenAI")
-            with col2:
-                owner = st.text_input("責任者", placeholder="例: 田中太郎")
-                purpose = st.text_input("利用目的", placeholder="例: 社内問い合わせ対応")
-                data_types = st.multiselect(
-                    "取扱データ",
-                    ["personal", "confidential", "public"],
-                    format_func=lambda v: {"personal": "個人データ", "confidential": "機密", "public": "公開"}.get(v, v),
-                )
-
-            submitted = st.form_submit_button("登録", type="primary")
-            if submitted and name:
-                try:
-                    system = register_ai_system(AISystemCreate(
-                        organization_id=org_id,
-                        name=name,
-                        description=description,
-                        ai_type=AISystemType(ai_type),
-                        department=department,
-                        vendor=vendor,
-                        owner=owner,
-                        purpose=purpose,
-                        data_types=data_types,
-                    ))
-                    st.success(f"登録完了: {system.name} (リスクレベル: {system.risk_level.value})")
-                except Exception as e:
-                    st.error(f"登録エラー: {e}")
-
-    st.markdown("---")
-
-    # ── システム一覧
-    systems = list_ai_systems(org_id)
-
-    if not systems:
-        st.info("登録されたAIシステムはありません。上のフォームから登録してください。")
-        return
-
-    # ダッシュボード
-    dash = get_registry_dashboard(org_id)
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("登録システム数", dash.total_systems)
-    col2.metric("高リスク", dash.by_risk_level.get("high", 0))
-    col3.metric("Shadow AI", dash.shadow_ai_count)
-    col4.metric("平均ガバナンススコア", f"{dash.avg_governance_score:.0%}")
-
-    st.markdown("---")
-
-    # リスク分布
-    if dash.by_risk_level:
-        st.subheader("リスク分布")
-        risk_data = {
-            "リスクレベル": list(dash.by_risk_level.keys()),
-            "件数": list(dash.by_risk_level.values()),
-        }
-        st.bar_chart(risk_data, x="リスクレベル", y="件数")
-
-    # システムテーブル
-    st.subheader("システム一覧")
-    table_data = []
-    for s in systems:
-        table_data.append({
-            "名前": s.name,
-            "種別": s.ai_type.value,
-            "リスク": s.risk_level.value,
-            "部門": s.department,
-            "責任者": s.owner,
-            "ステータス": s.status.value,
-            "ガバナンス": f"{s.governance_score:.0%}",
-        })
-    st.dataframe(table_data, use_container_width=True)
-
-
-# ── 5. エビデンス管理 ──────────────────────────────────────────────
-
-def page_evidence():
-    st.header("エビデンス管理")
-
-    org_id = st.session_state.organization_id
-
-    # カバレッジサマリー
-    try:
-        summary = get_evidence_summary(org_id)
+    # 対応状況のサマリー
+    if gap:
         col1, col2, col3 = st.columns(3)
-        col1.metric("カバレッジ率", f"{summary.coverage_rate:.0%}")
-        col2.metric("エビデンス有り", f"{summary.requirements_with_evidence}件")
-        col3.metric("全要件数", f"{summary.total_requirements}件")
+        col1.metric("OK", f"{gap.compliant_count}件", help="十分に対応できている項目")
+        col2.metric("注意", f"{gap.partial_count}件", help="一部対応できているが改善の余地がある項目")
+        col3.metric("要対応", f"{gap.non_compliant_count}件", help="対応が必要な項目")
 
-        st.progress(min(summary.coverage_rate, 1.0))
+    st.markdown("")
 
-        # カテゴリ別カバレッジ
-        if summary.by_category:
-            st.subheader("カテゴリ別カバレッジ")
-            for cat_id, info in summary.by_category.items():
-                title = info.get("title", cat_id)
-                covered = info.get("covered", 0)
-                total = info.get("total", 0)
-                rate = info.get("rate", 0)
-                color = "#28a745" if rate >= 0.7 else "#ffc107" if rate >= 0.3 else "#dc3545"
-                st.markdown(
-                    f"**{cat_id}: {title}** — "
-                    f"<span style='color:{color}'>{covered}/{total} ({rate:.0%})</span>",
-                    unsafe_allow_html=True,
-                )
-                st.progress(min(rate, 1.0))
-    except Exception as e:
-        st.warning(f"サマリー取得エラー: {e}")
+    _col_l, col_center, _col_r = st.columns([1, 2, 1])
+    with col_center:
+        if st.button("ダッシュボードへ", type="primary", use_container_width=True):
+            st.session_state.onboarded = True
+            st.session_state.current_page = None
+            st.rerun()
 
+    # カテゴリ別スコア
     st.markdown("---")
+    st.markdown("#### カテゴリ別の状況")
 
-    # エビデンスアップロード
-    st.subheader("エビデンス登録")
-    reqs = all_requirements()
-    req_options = {f"{r.req_id}: {r.title}": r.req_id for r in reqs}
-
-    with st.form("upload_evidence"):
-        selected_req = st.selectbox("対象要件", list(req_options.keys()))
-        filename = st.text_input("ファイル名", placeholder="例: ai_policy_v1.pdf")
-        description = st.text_area("説明", placeholder="エビデンスの説明")
-        file_type = st.selectbox("種別", ["policy", "test_result", "audit_log", "training_record", "other"],
-            format_func=lambda v: {
-                "policy": "ポリシー文書",
-                "test_result": "テスト結果",
-                "audit_log": "監査ログ",
-                "training_record": "研修記録",
-                "other": "その他",
-            }.get(v, v),
+    for cs in result.category_scores:
+        col_a, col_b = st.columns([3, 1])
+        cs_color = _score_color(cs.score)
+        col_a.markdown(f"**{cs.category_title}**")
+        col_b.markdown(
+            f"<span style='color:{cs_color};font-weight:bold'>{cs.score:.1f}</span> / 4.0",
+            unsafe_allow_html=True,
         )
-
-        submitted = st.form_submit_button("登録", type="primary")
-        if submitted and filename and selected_req:
-            try:
-                req_id = req_options[selected_req]
-                record = upload_evidence(
-                    EvidenceUpload(
-                        organization_id=org_id,
-                        requirement_id=req_id,
-                        filename=filename,
-                        description=description,
-                        file_type=file_type,
-                    )
-                )
-                st.success(f"登録完了: {record.filename}")
-            except Exception as e:
-                st.error(f"登録エラー: {e}")
-
-    # 登録済みエビデンス一覧
-    st.markdown("---")
-    st.subheader("登録済みエビデンス")
-    try:
-        evidences = list_evidence(org_id)
-        if evidences:
-            table = []
-            for ev in evidences:
-                table.append({
-                    "要件ID": ev.requirement_id,
-                    "ファイル名": ev.filename,
-                    "種別": ev.file_type,
-                    "説明": ev.description,
-                    "登録日": ev.uploaded_at[:10] if ev.uploaded_at else "",
-                })
-            st.dataframe(table, use_container_width=True)
-        else:
-            st.info("登録されたエビデンスはありません。")
-    except Exception as e:
-        st.warning(f"一覧取得エラー: {e}")
+        st.progress(min(cs.score / 4.0, 1.0))
 
 
-# ── 6. レポート ──────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════
+# メインページ（オンボーディング完了後）
+# ══════════════════════════════════════════════════════════════════
 
-def page_reports():
-    st.header("レポート")
+def page_dashboard() -> None:
+    """ダッシュボード: 現在の状況を一目で確認."""
+    st.header("ダッシュボード")
+    st.caption("このページでは、AIガバナンスの現在の状況を一目で確認できます。")
 
     assessment = st.session_state.assessment_result
     gap = st.session_state.gap_result
 
-    if assessment is None or gap is None:
-        st.info("レポートを生成するには、先に「診断」を実行してください。")
+    if assessment is None:
+        # 診断がまだの場合
+        st.markdown("""
+        <div class="empty-state">
+            <h3>まだ診断していません</h3>
+            <p>25問の診断に回答すると、ここにスコアと改善ポイントが表示されます。</p>
+        </div>
+        """, unsafe_allow_html=True)
+        if st.button("診断を始める", type="primary"):
+            st.session_state.current_page = "page_assessment"
+            st.rerun()
         return
 
-    st.subheader("レポート生成")
-    st.markdown("診断結果とギャップ分析を元にPDFレポートを生成します。")
+    # ── メインスコア
+    score = assessment.overall_score
+    color = _score_color(score)
 
-    org_name = st.text_input("組織名（レポート表示用）", value=st.session_state.organization_name)
-
-    if st.button("PDFレポートを生成", type="primary"):
-        with st.spinner("レポート生成中..."):
-            try:
-                evidence_summary = None
-                try:
-                    evidence_summary = get_evidence_summary(st.session_state.organization_id)
-                except Exception:
-                    pass
-
-                report = _run_async(generate_report(
-                    assessment,
-                    gap,
-                    evidence_summary=evidence_summary,
-                    organization_name=org_name,
-                ))
-                st.success(f"レポート生成完了: {report.filename}")
-
-                # PDFダウンロード
-                report_path = os.path.join("reports", report.filename)
-                if os.path.exists(report_path):
-                    with open(report_path, "rb") as f:
-                        st.download_button(
-                            label="PDFをダウンロード",
-                            data=f.read(),
-                            file_name=report.filename,
-                            mime="application/pdf",
-                        )
-            except Exception as e:
-                st.error(f"レポート生成エラー: {e}")
-
-    # 現在の結果サマリー
-    st.markdown("---")
-    st.subheader("現在の評価サマリー")
-    col1, col2, col3 = st.columns(3)
-    col1.metric("成熟度", _maturity_label(assessment.maturity_level))
-    col2.metric("スコア", f"{assessment.overall_score:.2f}/4.00")
-    col3.metric(
-        "充足率",
-        f"{gap.compliant_count / gap.total_requirements:.0%}" if gap.total_requirements > 0 else "---",
+    st.markdown(
+        f'<div class="score-gauge">'
+        f'<div class="score-number" style="color:{color}">{score:.1f}</div>'
+        f'<div class="score-label">/ 4.0 ({_maturity_label(assessment.maturity_level)})</div>'
+        f'</div>',
+        unsafe_allow_html=True,
     )
 
+    # ── 対応状況サマリー
+    if gap:
+        st.markdown("#### あなたの対応状況")
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric(
+            "OK",
+            f"{gap.compliant_count}件",
+            help="十分に対応できている項目の数",
+        )
+        col2.metric(
+            "注意",
+            f"{gap.partial_count}件",
+            help="一部対応できているが改善の余地がある項目の数",
+        )
+        col3.metric(
+            "要対応",
+            f"{gap.non_compliant_count}件",
+            help="対応が必要な項目の数",
+        )
+        total = gap.total_requirements
+        rate = gap.compliant_count / total if total > 0 else 0
+        col4.metric(
+            "対応率",
+            f"{rate:.0%}",
+            help="全項目のうち十分に対応できている割合",
+        )
 
-# ── 7. AIアドバイザー ──────────────────────────────────────────────
+        st.markdown("---")
 
-def page_advisor():
-    st.header("AIアドバイザー")
-    st.caption("AIガバナンスに関する質問にお答えします（Anthropic APIキーがない場合はFAQフォールバック）")
+        # ── 次にやるべきこと トップ3
+        st.markdown("#### 次にやるべきこと")
+
+        high_priority_gaps = [
+            g for g in gap.gaps
+            if g.status == ComplianceStatus.NON_COMPLIANT and g.priority == "high"
+        ]
+        if not high_priority_gaps:
+            high_priority_gaps = [
+                g for g in gap.gaps
+                if g.status == ComplianceStatus.NON_COMPLIANT
+            ]
+        if not high_priority_gaps:
+            high_priority_gaps = [
+                g for g in gap.gaps
+                if g.status == ComplianceStatus.PARTIAL
+            ]
+
+        top_actions = high_priority_gaps[:3]
+
+        if top_actions:
+            for i, g in enumerate(top_actions, 1):
+                actions_text = ""
+                if g.improvement_actions:
+                    actions_text = g.improvement_actions[0]
+                st.markdown(
+                    f'<div class="action-card">'
+                    f'<strong>{i}. {g.title}</strong><br>'
+                    f'<span style="color:#6c757d">{actions_text}</span>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+        else:
+            st.success("すべての項目に対応済みです。")
+
+        st.markdown("")
+        if st.button("すべての改善項目を見る"):
+            st.session_state.current_page = "page_gaps"
+            st.rerun()
+
+    # ── カテゴリ別スコア
+    st.markdown("---")
+    st.markdown("#### カテゴリ別の状況")
+
+    for cs in assessment.category_scores:
+        col_a, col_b = st.columns([3, 1])
+        cs_color = _score_color(cs.score)
+        col_a.markdown(f"**{cs.category_title}**")
+        col_b.markdown(
+            f"<span style='color:{cs_color};font-weight:bold'>{cs.score:.1f}</span> / 4.0",
+            unsafe_allow_html=True,
+        )
+        st.progress(min(cs.score / 4.0, 1.0))
+
+
+def page_assessment() -> None:
+    """診断する: 25問の質問に回答."""
+    st.header("診断する")
+    st.caption("このページでは、25問の質問に回答してAIガバナンスの成熟度を診断します。")
+
+    questions = ASSESSMENT_QUESTIONS
+    total_q = len(questions)
+    step = st.session_state.assessment_step
+
+    # 既に診断済みの場合
+    if st.session_state.assessment_done and st.session_state.assessment_result is not None:
+        result = st.session_state.assessment_result
+
+        st.success(
+            f"診断済みです（スコア: {result.overall_score:.1f} / 4.0, "
+            f"{_maturity_label(result.maturity_level)}）"
+        )
+
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("もう一度診断する"):
+                st.session_state.assessment_step = 0
+                st.session_state.assessment_answers = {}
+                st.session_state.assessment_done = False
+                st.session_state.assessment_result = None
+                st.session_state.gap_result = None
+                st.rerun()
+        with col2:
+            if st.button("結果を見る", type="primary"):
+                st.session_state.current_page = "page_dashboard"
+                st.rerun()
+
+        # 前回の結果を表示
+        st.markdown("---")
+        st.markdown("#### 前回の診断結果")
+
+        score = result.overall_score
+        color = _score_color(score)
+        st.markdown(
+            f'<div class="score-gauge">'
+            f'<div class="score-number" style="color:{color}">{score:.1f}</div>'
+            f'<div class="score-label">/ 4.0 ({_maturity_label(result.maturity_level)})</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+        for cs in result.category_scores:
+            col_a, col_b = st.columns([3, 1])
+            cs_color = _score_color(cs.score)
+            col_a.markdown(f"**{cs.category_title}**")
+            col_b.markdown(
+                f"<span style='color:{cs_color};font-weight:bold'>{cs.score:.1f}</span> / 4.0",
+                unsafe_allow_html=True,
+            )
+            st.progress(min(cs.score / 4.0, 1.0))
+        return
+
+    # ── ステップバイステップ質問表示
+    if step >= total_q:
+        # 全問回答済み → 診断実行
+        st.success("全25問の回答が完了しました。")
+
+        if st.button("診断結果を見る", type="primary"):
+            with st.spinner("診断しています..."):
+                try:
+                    answers = []
+                    for q in questions:
+                        idx = st.session_state.assessment_answers.get(q.question_id, 0)
+                        answers.append(AnswerItem(question_id=q.question_id, selected_index=idx))
+
+                    result = run_assessment(st.session_state.organization_id, answers)
+                    st.session_state.assessment_result = result
+
+                    gap = _run_async(run_gap_analysis(result))
+                    st.session_state.gap_result = gap
+                    st.session_state.assessment_done = True
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"診断中にエラーが発生しました: {e}")
+
+        if st.button("回答をやり直す"):
+            st.session_state.assessment_step = 0
+            st.session_state.assessment_answers = {}
+            st.rerun()
+        return
+
+    q = questions[step]
+
+    # プログレスバー
+    st.progress(step / total_q)
+    st.caption(f"{step} / {total_q} 問回答済み")
+
+    # カテゴリ表示
+    cat_title = next((c.title for c in CATEGORIES if c.category_id == q.category_id), q.category_id)
+    st.markdown(f"**{cat_title}**")
+
+    # 質問テキスト
+    st.markdown(f"#### Q{step + 1}. {q.text}")
+
+    # ヘルプテキスト
+    help_text = QUESTION_HELP.get(q.question_id, "")
+    if help_text:
+        st.markdown(f'<div class="question-help">{help_text}</div>', unsafe_allow_html=True)
+
+    # 回答選択
+    current_answer = st.session_state.assessment_answers.get(q.question_id, 0)
+    selected = st.radio(
+        "回答を選んでください",
+        range(len(q.options)),
+        format_func=lambda i: q.options[i],
+        index=current_answer,
+        key=f"q_{q.question_id}",
+        label_visibility="collapsed",
+    )
+    st.session_state.assessment_answers[q.question_id] = selected
+
+    # ナビゲーション
+    st.markdown("")
+    col_prev, _col_mid, col_next = st.columns([1, 1, 1])
+
+    with col_prev:
+        if step > 0:
+            if st.button("前の質問へ"):
+                st.session_state.assessment_step = step - 1
+                st.rerun()
+
+    with col_next:
+        if step < total_q - 1:
+            if st.button("次の質問へ", type="primary"):
+                st.session_state.assessment_step = step + 1
+                st.rerun()
+        else:
+            if st.button("回答を完了する", type="primary"):
+                st.session_state.assessment_step = total_q
+                st.rerun()
+
+
+def page_gaps() -> None:
+    """改善が必要な項目: ギャップ一覧と改善アクション."""
+    st.header("改善が必要な項目")
+    st.caption("このページでは、対応が必要な項目と具体的な改善方法を確認できます。")
+
+    gap = st.session_state.gap_result
+
+    if gap is None:
+        st.markdown("""
+        <div class="empty-state">
+            <h3>まだ診断していません</h3>
+            <p>診断を完了すると、改善が必要な項目がここに表示されます。</p>
+        </div>
+        """, unsafe_allow_html=True)
+        if st.button("診断を始める", type="primary"):
+            st.session_state.current_page = "page_assessment"
+            st.rerun()
+        return
+
+    # サマリー
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("OK", f"{gap.compliant_count}件", help="十分に対応できている項目")
+    col2.metric("注意", f"{gap.partial_count}件", help="一部対応できているが改善の余地がある項目")
+    col3.metric("要対応", f"{gap.non_compliant_count}件", help="対応が必要な項目")
+    total = gap.total_requirements
+    rate = gap.compliant_count / total if total > 0 else 0
+    col4.metric("対応率", f"{rate:.0%}")
+
+    st.markdown("---")
+
+    # フィルタ
+    status_filter = st.selectbox(
+        "表示する項目",
+        ["すべて", "要対応", "注意", "OK"],
+        help="対応状況で絞り込めます",
+    )
+
+    # フィルタ適用
+    filtered_gaps = gap.gaps
+    if status_filter == "要対応":
+        filtered_gaps = [g for g in filtered_gaps if g.status == ComplianceStatus.NON_COMPLIANT]
+    elif status_filter == "注意":
+        filtered_gaps = [g for g in filtered_gaps if g.status == ComplianceStatus.PARTIAL]
+    elif status_filter == "OK":
+        filtered_gaps = [g for g in filtered_gaps if g.status == ComplianceStatus.COMPLIANT]
+
+    st.caption(f"{len(filtered_gaps)}件の項目")
+
+    # ギャップ一覧
+    for g in filtered_gaps:
+        status_val = g.status.value
+        label = _status_label(status_val)
+        color = _status_color(status_val)
+
+        # カードスタイル
+        card_class = "gap-card-red"
+        if status_val == "compliant":
+            card_class = "gap-card-green"
+        elif status_val == "partial":
+            card_class = "gap-card-yellow"
+
+        with st.expander(
+            f"{'!' if status_val == 'non_compliant' else ''} "
+            f"**{g.title}** [{label}]",
+            expanded=(g.status == ComplianceStatus.NON_COMPLIANT),
+        ):
+            # ステータスバッジ
+            st.markdown(
+                f"<span style='background-color:{color};color:white;padding:2px 8px;"
+                f"border-radius:4px;font-size:0.85em'>{label}</span>"
+                f" スコア: **{g.current_score:.1f}** / 4.0",
+                unsafe_allow_html=True,
+            )
+
+            # 問題の説明
+            if g.gap_description:
+                st.markdown("")
+                st.markdown("**何が問題か:**")
+                st.markdown(f"> {g.gap_description}")
+
+            # 改善アクション
+            if g.improvement_actions:
+                st.markdown("")
+                st.markdown("**どうすれば改善できるか:**")
+                for i, action in enumerate(g.improvement_actions, 1):
+                    st.markdown(f"{i}. {action}")
+
+            # 関連する証拠書類
+            # 要件に紐づく証拠書類の種類を表示
+            req = next((r for r in all_requirements() if r.req_id == g.req_id), None)
+            if req:
+                st.markdown("")
+                st.markdown("**必要な証拠書類の例:**")
+                st.caption("ポリシー文書、テスト結果、監査ログ、研修記録など")
+
+    # AI改善提案
+    if gap.ai_recommendations:
+        st.markdown("---")
+        st.markdown("#### AIからの改善提案")
+        st.markdown(gap.ai_recommendations)
+
+
+def page_chat() -> None:
+    """AIに質問する: チャットUI."""
+    st.header("AIに質問する")
+    st.caption("このページでは、AIガバナンスに関する質問にAIが回答します。")
+
+    # API キーの確認
+    has_api_key = bool(os.environ.get("ANTHROPIC_API_KEY"))
+
+    if not has_api_key:
+        st.info(
+            "より詳しい回答を得るには、ANTHROPIC_API_KEY 環境変数を設定してください。"
+            "現在はよくある質問から回答します。"
+        )
+
+    # サジェストボタン
+    st.markdown("**質問の例:**")
+    suggest_col1, suggest_col2, suggest_col3 = st.columns(3)
+
+    suggested_question = None
+    with suggest_col1:
+        if st.button("リスク評価のやり方は？", use_container_width=True):
+            suggested_question = "リスクアセスメントのやり方を教えてください"
+    with suggest_col2:
+        if st.button("ISO 42001認証を取るには？", use_container_width=True):
+            suggested_question = "ISO 42001認証を取得するにはどうすればよいですか？"
+    with suggest_col3:
+        if st.button("最初に何をすべき？", use_container_width=True):
+            suggested_question = "AIガバナンスに取り組む際、最初に何をすべきですか？"
+
+    st.markdown("---")
 
     # チャット履歴表示
-    for msg in st.session_state.chat_messages:
+    for msg in st.session_state.chat_history:
         role = msg["role"]
         with st.chat_message(role):
             st.markdown(msg["content"])
 
-    # ユーザー入力
-    if prompt := st.chat_input("質問を入力してください..."):
+    # サジェストからの質問またはユーザー入力
+    prompt = suggested_question
+    if prompt is None:
+        prompt = st.chat_input("質問を入力してください...")
+
+    if prompt:
         # ユーザーメッセージ追加
-        st.session_state.chat_messages.append({"role": "user", "content": prompt})
+        st.session_state.chat_history.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
 
         # AI応答
         with st.chat_message("assistant"):
-            with st.spinner("回答を生成中..."):
+            with st.spinner("回答を作成中..."):
                 try:
                     request = ChatRequest(
                         session_id=st.session_state.chat_session_id,
@@ -741,60 +961,129 @@ def page_advisor():
                     st.session_state.chat_session_id = response.session_id
                     answer = response.message.content
                     st.markdown(answer)
-                    st.session_state.chat_messages.append({"role": "assistant", "content": answer})
+                    st.session_state.chat_history.append({"role": "assistant", "content": answer})
 
                     if response.sources:
                         st.caption(f"参照: {', '.join(response.sources)}")
-                except Exception as e:
-                    error_msg = f"回答の生成中にエラーが発生しました: {e}"
+                except Exception:
+                    error_msg = "回答の生成中にエラーが発生しました。もう一度お試しください。"
                     st.error(error_msg)
-                    st.session_state.chat_messages.append({"role": "assistant", "content": error_msg})
+                    st.session_state.chat_history.append({"role": "assistant", "content": error_msg})
 
     # クリアボタン
-    if st.session_state.chat_messages:
+    if st.session_state.chat_history:
         if st.button("会話をクリア"):
-            st.session_state.chat_messages = []
+            st.session_state.chat_history = []
             st.session_state.chat_session_id = ""
             st.rerun()
 
 
-# ── 8. 設定 ────────────────────────────────────────────────────────
-
-def page_settings():
+def page_settings() -> None:
+    """設定: 組織情報変更とAIシステム台帳."""
     st.header("設定")
+    st.caption("このページでは、組織情報の変更やAIシステムの管理ができます。")
 
+    # ── 組織情報
     st.subheader("組織情報")
 
     with st.form("org_settings"):
-        name = st.text_input("組織名", value=st.session_state.organization_name)
+        name = st.text_input("組織名", value=st.session_state.org_name)
         industry = st.selectbox(
-            "業界",
+            "業種",
             ["IT・通信", "金融・保険", "製造", "医療・ヘルスケア", "小売・EC", "公共・行政", "教育", "その他"],
             index=["IT・通信", "金融・保険", "製造", "医療・ヘルスケア", "小売・EC", "公共・行政", "教育", "その他"].index(
-                st.session_state.organization_industry
-            ) if st.session_state.organization_industry in ["IT・通信", "金融・保険", "製造", "医療・ヘルスケア", "小売・EC", "公共・行政", "教育", "その他"] else 0,
+                st.session_state.org_industry
+            ) if st.session_state.org_industry in ["IT・通信", "金融・保険", "製造", "医療・ヘルスケア", "小売・EC", "公共・行政", "教育", "その他"] else 0,
         )
         size = st.selectbox(
-            "組織規模",
+            "従業員数",
             ["small", "medium", "large", "enterprise"],
             format_func=lambda v: {
-                "small": "小規模 (〜50名)",
-                "medium": "中規模 (50〜300名)",
-                "large": "大規模 (300〜1000名)",
-                "enterprise": "エンタープライズ (1000名〜)",
+                "small": "50名以下",
+                "medium": "50〜300名",
+                "large": "300〜1,000名",
+                "enterprise": "1,000名以上",
             }.get(v, v),
-            index=["small", "medium", "large", "enterprise"].index(st.session_state.organization_size)
-            if st.session_state.organization_size in ["small", "medium", "large", "enterprise"] else 1,
+            index=["small", "medium", "large", "enterprise"].index(st.session_state.org_size)
+            if st.session_state.org_size in ["small", "medium", "large", "enterprise"] else 1,
         )
 
         submitted = st.form_submit_button("保存", type="primary")
         if submitted:
-            st.session_state.organization_name = name
-            st.session_state.organization_industry = industry
-            st.session_state.organization_size = size
+            st.session_state.org_name = name
+            st.session_state.org_industry = industry
+            st.session_state.org_size = size
             st.success("組織情報を保存しました。")
 
     st.markdown("---")
+
+    # ── AIシステム台帳（簡易版）
+    st.subheader("AIシステム台帳")
+    st.caption("組織で利用しているAIシステムを登録・管理できます。")
+
+    org_id = st.session_state.organization_id
+
+    # 新規登録
+    with st.expander("AIシステムを追加", expanded=False):
+        with st.form("register_ai_system"):
+            sys_name = st.text_input("システム名", placeholder="例: 社内チャットボット")
+
+            risk_display = st.selectbox(
+                "リスクの高さ",
+                ["minimal", "limited", "high"],
+                format_func=lambda v: {
+                    "minimal": "低い（社内利用のみ等）",
+                    "limited": "中程度（顧客対応等）",
+                    "high": "高い（自動判定・個人情報処理等）",
+                }.get(v, v),
+                help="AIシステムが扱うデータや判断の重要度で選んでください",
+            )
+
+            sys_submitted = st.form_submit_button("登録", type="primary")
+            if sys_submitted and sys_name:
+                try:
+                    from app.services.ai_registry import AISystemRiskLevel
+                    system = register_ai_system(AISystemCreate(
+                        organization_id=org_id,
+                        name=sys_name,
+                        risk_level=AISystemRiskLevel(risk_display),
+                    ))
+                    st.success(f"「{system.name}」を登録しました。")
+                except Exception as e:
+                    st.error(f"登録中にエラーが発生しました: {e}")
+
+    # システム一覧
+    try:
+        systems = list_ai_systems(org_id)
+        if systems:
+            st.markdown("")
+            for s in systems:
+                risk_label = {
+                    "high": "高リスク",
+                    "limited": "中リスク",
+                    "minimal": "低リスク",
+                }.get(s.risk_level.value, s.risk_level.value)
+
+                risk_color = {
+                    "high": "#dc3545",
+                    "limited": "#ffc107",
+                    "minimal": "#28a745",
+                }.get(s.risk_level.value, "#6c757d")
+
+                st.markdown(
+                    f"**{s.name}** "
+                    f"<span style='background-color:{risk_color};color:white;padding:2px 8px;"
+                    f"border-radius:4px;font-size:0.8em'>{risk_label}</span>",
+                    unsafe_allow_html=True,
+                )
+        else:
+            st.caption("登録されたAIシステムはありません。")
+    except Exception as e:
+        st.warning(f"一覧の取得中にエラーが発生しました: {e}")
+
+    st.markdown("---")
+
+    # ── データ管理
     st.subheader("データ管理")
 
     col1, col2 = st.columns(2)
@@ -802,31 +1091,76 @@ def page_settings():
         if st.button("診断データをリセット"):
             st.session_state.assessment_result = None
             st.session_state.gap_result = None
-            st.session_state.iso_result = None
             st.session_state.assessment_answers = {}
             st.session_state.assessment_step = 0
+            st.session_state.assessment_done = False
             st.success("診断データをリセットしました。")
     with col2:
-        if st.button("チャット履歴をリセット"):
-            st.session_state.chat_messages = []
+        if st.button("会話履歴をリセット"):
+            st.session_state.chat_history = []
             st.session_state.chat_session_id = ""
-            st.success("チャット履歴をリセットしました。")
+            st.success("会話履歴をリセットしました。")
 
 
 # ══════════════════════════════════════════════════════════════════
 # ルーティング
 # ══════════════════════════════════════════════════════════════════
 
-PAGE_MAP = {
-    "\U0001f4ca ダッシュボード": page_dashboard,
-    "\U0001f4cb 診断 (Self-Assessment)": page_assessment,
-    "\U0001f50d ギャップ分析": page_gap_analysis,
-    "\U0001f916 AIシステム台帳": page_ai_registry,
-    "\U0001f4c2 エビデンス管理": page_evidence,
-    "\U0001f4c4 レポート": page_reports,
-    "\U0001f4ac AIアドバイザー": page_advisor,
-    "\u2699\ufe0f 設定": page_settings,
-}
+# オンボーディング未完了 → オンボーディングフローを表示
+if not st.session_state.onboarded and not st.session_state.assessment_done:
+    current = st.session_state.current_page
 
-page_fn = PAGE_MAP.get(page, page_dashboard)
-page_fn()
+    if current == "onboarding_org":
+        show_onboarding_org()
+    elif current == "onboarding_assessment":
+        show_onboarding_assessment()
+    else:
+        show_welcome()
+else:
+    # オンボーディング完了後のメイン画面
+    st.session_state.onboarded = True
+
+    # サイドバー
+    st.sidebar.title("AIガバナンス診断")
+    st.sidebar.caption(st.session_state.org_name if st.session_state.org_name else "JPGovAI")
+    st.sidebar.markdown("---")
+
+    page = st.sidebar.radio(
+        "メニュー",
+        [
+            "ダッシュボード",
+            "診断する",
+            "改善が必要な項目",
+            "AIに質問する",
+            "設定",
+        ],
+        label_visibility="collapsed",
+    )
+
+    st.sidebar.markdown("---")
+    org_display = st.session_state.org_name if st.session_state.org_name else "未設定"
+    st.sidebar.caption(f"組織: {org_display}")
+
+    # ページ遷移（ボタンからの直接遷移をサポート）
+    override_page = st.session_state.current_page
+    if override_page in ("page_dashboard", "page_assessment", "page_gaps", "page_chat", "page_settings"):
+        page_map = {
+            "page_dashboard": "ダッシュボード",
+            "page_assessment": "診断する",
+            "page_gaps": "改善が必要な項目",
+            "page_chat": "AIに質問する",
+            "page_settings": "設定",
+        }
+        page = page_map.get(override_page, page)
+        st.session_state.current_page = None
+
+    PAGE_MAP = {
+        "ダッシュボード": page_dashboard,
+        "診断する": page_assessment,
+        "改善が必要な項目": page_gaps,
+        "AIに質問する": page_chat,
+        "設定": page_settings,
+    }
+
+    page_fn = PAGE_MAP.get(page, page_dashboard)
+    page_fn()
