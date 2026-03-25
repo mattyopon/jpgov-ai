@@ -1667,3 +1667,282 @@ def get_prediction_api(
     """スコア予測を取得."""
     from app.services.prediction import predict_score
     return predict_score(organization_id, target_date, target_score)
+
+
+# ── Phase 4: METI Interpretation Guide ───────────────────
+
+@app.get("/api/knowledge/meti-interpretation/{req_id}")
+def get_meti_interpretation_api(
+    req_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> dict | None:
+    """METI要件の解釈ガイドを取得."""
+    from app.guidelines.meti_interpretation import get_interpretation
+    interp = get_interpretation(req_id)
+    if interp is None:
+        raise HTTPException(status_code=404, detail="Interpretation not found")
+    return {
+        "req_id": interp.req_id,
+        "official_text": interp.official_text,
+        "interpretation": interp.interpretation,
+        "common_misunderstanding": interp.common_misunderstanding,
+        "auditor_focus": interp.auditor_focus,
+        "best_practice": interp.best_practice,
+        "pitfall": interp.pitfall,
+        "related_pubcomment": interp.related_pubcomment,
+        "iso42001_cross_ref": interp.iso42001_cross_ref,
+    }
+
+
+@app.get("/api/knowledge/meti-interpretations")
+def list_meti_interpretations_api(
+    _user: TokenPayload = Depends(get_current_user),
+) -> list[dict]:
+    """全METI解釈ガイドを取得."""
+    from app.guidelines.meti_interpretation import all_interpretations
+    return [
+        {"req_id": i.req_id, "official_text": i.official_text,
+         "interpretation": i.interpretation}
+        for i in all_interpretations()
+    ]
+
+
+# ── Phase 4: ISO 42001 Certification Guide ───────────────
+
+@app.get("/api/knowledge/certification-guide")
+def get_certification_guide_api(
+    _user: TokenPayload = Depends(get_current_user),
+) -> dict:
+    """ISO 42001認証取得ガイドを取得."""
+    from app.knowledge.iso42001_certification_guide import (
+        get_all_required_documents,
+        get_certification_bodies,
+        get_certification_phases,
+        get_certification_timelines,
+        get_common_nonconformities,
+        get_maintenance_audits,
+    )
+    return {
+        "phases": [
+            {"phase": p.phase, "name": p.name, "duration": p.duration,
+             "tasks": p.tasks, "required_documents": p.required_documents,
+             "jpgovai_value": p.jpgovai_value}
+            for p in get_certification_phases()
+        ],
+        "common_nonconformities": [
+            {"rank": nc.rank, "title": nc.title, "clause": nc.clause,
+             "description": nc.description, "prevention": nc.prevention}
+            for nc in get_common_nonconformities()
+        ],
+        "certification_bodies": [
+            {"name": cb.name, "code": cb.code, "focus_areas": cb.focus_areas,
+             "typical_cost_range": cb.typical_cost_range}
+            for cb in get_certification_bodies()
+        ],
+        "timelines": [
+            {"size": t.size, "size_description": t.size_description,
+             "total_months_min": t.total_months_min,
+             "total_months_max": t.total_months_max, "notes": t.notes}
+            for t in get_certification_timelines()
+        ],
+        "maintenance_audits": [
+            {"audit_type": m.audit_type, "frequency": m.frequency,
+             "scope": m.scope, "cost_factor": m.cost_factor}
+            for m in get_maintenance_audits()
+        ],
+        "all_required_documents": get_all_required_documents(),
+    }
+
+
+# ── Phase 4: Finance Deep Guide ──────────────────────────
+
+@app.get("/api/knowledge/finance/risks")
+def get_finance_risks_api(
+    _user: TokenPayload = Depends(get_current_user),
+) -> list[dict]:
+    """金融業AIリスク一覧を取得."""
+    from app.guidelines.finance_deep_guide import get_financial_risks
+    return [
+        {"risk_id": r.risk_id, "category": r.category, "title": r.title,
+         "description": r.description, "specific_actions": r.specific_actions,
+         "meti_mapping": r.meti_mapping}
+        for r in get_financial_risks()
+    ]
+
+
+@app.get("/api/knowledge/finance/use-cases")
+def get_finance_use_cases_api(
+    _user: TokenPayload = Depends(get_current_user),
+) -> list[dict]:
+    """金融業AIユースケース一覧を取得."""
+    from app.guidelines.finance_deep_guide import get_financial_use_cases
+    return [
+        {"use_case_id": u.use_case_id, "name": u.name,
+         "risk_level": u.risk_level, "key_risks": u.key_risks,
+         "required_controls": u.required_controls}
+        for u in get_financial_use_cases()
+    ]
+
+
+@app.get("/api/knowledge/finance/deep-guide/{req_id}")
+def get_finance_deep_guide_api(
+    req_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> dict:
+    """METI要件IDに対する金融業ディープガイドを取得."""
+    from app.guidelines.finance_deep_guide import get_requirement_deep_guide
+    guide = get_requirement_deep_guide(req_id)
+    if guide is None:
+        raise HTTPException(status_code=404, detail="Guide not found for this requirement")
+    return guide
+
+
+# ── Phase 4: Audit Package ───────────────────────────────
+
+@app.post("/api/audit-package/iso42001-stage1")
+def generate_iso_stage1_package_api(
+    organization_id: str,
+    gap_analysis_id: str,
+    organization_name: str = "",
+    _user: TokenPayload = Depends(get_current_user),
+) -> dict:
+    """ISO 42001 Stage 1 審査用文書パッケージを生成."""
+    from app.services.audit_package import generate_iso42001_stage1_package
+    package = generate_iso42001_stage1_package(
+        organization_id, gap_analysis_id, organization_name,
+    )
+
+    ledger = get_audit_ledger()
+    ledger.append(
+        action="audit_package.generate",
+        actor=_user.user_id,
+        resource_type="audit_package",
+        resource_id=package.id,
+        details={
+            "audit_type": "iso42001_stage1",
+            "document_count": len(package.documents),
+        },
+    )
+
+    return package.to_dict()
+
+
+@app.get("/api/audit-package/internal-audit-checklist")
+def get_internal_audit_checklist_api(
+    _user: TokenPayload = Depends(get_current_user),
+) -> dict:
+    """内部監査チェックリストを生成."""
+    from app.services.audit_package import generate_internal_audit_checklist
+    return generate_internal_audit_checklist()
+
+
+@app.get("/api/audit-package/management-review-template")
+def get_management_review_template_api(
+    organization_name: str = "",
+    _user: TokenPayload = Depends(get_current_user),
+) -> dict:
+    """マネジメントレビュー議事録テンプレートを生成."""
+    from app.services.audit_package import generate_management_review_template
+    return generate_management_review_template(organization_name)
+
+
+@app.get("/api/audit-package/corrective-action-template")
+def get_corrective_action_template_api(
+    _user: TokenPayload = Depends(get_current_user),
+) -> dict:
+    """是正措置記録テンプレートを生成."""
+    from app.services.audit_package import generate_corrective_action_template
+    return generate_corrective_action_template()
+
+
+# ── Phase 5: Public API (API Key Management) ─────────────
+
+@app.post("/api/v1/api-keys")
+def create_api_key_api(
+    organization_id: str,
+    name: str = "",
+    _user: TokenPayload = Depends(get_current_user),
+) -> dict:
+    """API Keyを発行."""
+    from app.api.public_api import get_api_key_manager
+    mgr = get_api_key_manager()
+    return mgr.create_key(organization_id, name)
+
+
+@app.get("/api/v1/api-keys/{organization_id}")
+def list_api_keys_api(
+    organization_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> list[dict]:
+    """API Key一覧を取得."""
+    from app.api.public_api import get_api_key_manager
+    return get_api_key_manager().list_keys(organization_id)
+
+
+@app.delete("/api/v1/api-keys/{key_id}")
+def revoke_api_key_api(
+    key_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> dict:
+    """API Keyを無効化."""
+    from app.api.public_api import get_api_key_manager
+    success = get_api_key_manager().revoke_key(key_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="API Key not found")
+    return {"status": "revoked"}
+
+
+# ── Phase 5: Webhooks ────────────────────────────────────
+
+@app.post("/api/v1/webhooks")
+def register_webhook_api(
+    organization_id: str,
+    url: str,
+    events: str = "*",
+    _user: TokenPayload = Depends(get_current_user),
+) -> dict:
+    """Webhookを登録."""
+    from app.api.public_api import get_webhook_manager
+    event_list = [e.strip() for e in events.split(",")]
+    config = get_webhook_manager().register(organization_id, url, event_list)
+    return {
+        "id": config.id,
+        "url": config.url,
+        "events": config.events,
+        "secret": config.secret,
+    }
+
+
+@app.get("/api/v1/webhooks/{organization_id}")
+def list_webhooks_api(
+    organization_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> list[dict]:
+    """Webhook一覧を取得."""
+    from app.api.public_api import get_webhook_manager
+    return get_webhook_manager().list_webhooks(organization_id)
+
+
+@app.delete("/api/v1/webhooks/{webhook_id}")
+def unregister_webhook_api(
+    webhook_id: str,
+    _user: TokenPayload = Depends(get_current_user),
+) -> dict:
+    """Webhook登録解除."""
+    from app.api.public_api import get_webhook_manager
+    success = get_webhook_manager().unregister(webhook_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Webhook not found")
+    return {"status": "unregistered"}
+
+
+# ── Phase 5: Citadel AI Integration ─────────────────────
+
+@app.get("/api/citadel/mapping")
+def get_citadel_mapping_api(
+    _user: TokenPayload = Depends(get_current_user),
+) -> dict:
+    """Citadel AI -> JPGovAI要件マッピングを取得."""
+    from app.services.citadel_integration import CitadelIntegrationService
+    service = CitadelIntegrationService()
+    return service.get_requirement_mapping()

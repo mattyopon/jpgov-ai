@@ -114,6 +114,13 @@ page = st.sidebar.radio(
         "規制変更モニター",
         "改善効果分析",
         "スコア予測",
+        "METI解釈ガイド",
+        "ISO 42001認証ガイド",
+        "金融業ディープガイド",
+        "監査パッケージ",
+        "API Key管理",
+        "Webhook管理",
+        "Citadel AI連携",
         "レポート生成",
         "エクスポート",
         "監査証跡",
@@ -1596,6 +1603,244 @@ elif page == "スコア予測":
                 st.info("予測に必要なデータが不足しています。診断を2回以上実施してください。")
     else:
         st.warning("先に「組織登録」を完了してください。")
+
+elif page == "METI解釈ガイド":
+    st.title("METI AI事業者ガイドライン 解釈ガイド")
+    st.markdown("ガイドラインの「行間」を読み解く専門知識を提供します。")
+
+    interpretations = api_get("/knowledge/meti-interpretations")
+    if interpretations:
+        for interp in interpretations:
+            with st.expander(f"{interp['req_id']}: {interp.get('official_text', '')[:60]}..."):
+                st.markdown(f"**実務での解釈**: {interp.get('interpretation', '')}")
+
+                # Fetch full details
+                detail = api_get(f"/knowledge/meti-interpretation/{interp['req_id']}")
+                if detail:
+                    st.markdown("---")
+                    st.markdown(f"**よくある誤解**: {detail.get('common_misunderstanding', '')}")
+                    st.markdown(f"**審査員の着眼点**: {detail.get('auditor_focus', '')}")
+                    st.markdown(f"**ベストプラクティス**: {detail.get('best_practice', '')}")
+                    st.markdown(f"**落とし穴**: {detail.get('pitfall', '')}")
+                    if detail.get("related_pubcomment"):
+                        st.caption(f"参考: {detail['related_pubcomment']}")
+                    if detail.get("iso42001_cross_ref"):
+                        st.caption(f"ISO 42001参照: {detail['iso42001_cross_ref']}")
+
+elif page == "ISO 42001認証ガイド":
+    st.title("ISO 42001 認証取得実務ガイド")
+    st.markdown("ISO 42001認証を実際に取得するための実務手順を提供します。")
+
+    guide = api_get("/knowledge/certification-guide")
+    if guide:
+        tab1, tab2, tab3, tab4 = st.tabs(["認証プロセス", "よくある不適合", "認証機関", "期間・コスト"])
+
+        with tab1:
+            for phase in guide.get("phases", []):
+                with st.expander(f"Phase {phase['phase']}: {phase['name']} ({phase['duration']})"):
+                    st.markdown("**タスク:**")
+                    for task in phase.get("tasks", []):
+                        st.markdown(f"  - {task}")
+                    st.markdown("**必要文書:**")
+                    for doc in phase.get("required_documents", []):
+                        st.markdown(f"  - {doc}")
+                    if phase.get("jpgovai_value"):
+                        st.info(f"JPGovAIの価値: {phase['jpgovai_value']}")
+
+        with tab2:
+            for nc in guide.get("common_nonconformities", []):
+                with st.expander(f"#{nc['rank']}: {nc['title']} (条項 {nc['clause']})"):
+                    st.markdown(f"**説明**: {nc['description']}")
+                    st.markdown(f"**予防策**: {nc['prevention']}")
+
+        with tab3:
+            for cb in guide.get("certification_bodies", []):
+                with st.expander(f"{cb['name']} ({cb['code']})"):
+                    st.markdown(f"**重点領域**: {cb['focus_areas']}")
+                    st.markdown(f"**費用目安**: {cb['typical_cost_range']}")
+
+        with tab4:
+            for tl in guide.get("timelines", []):
+                st.markdown(
+                    f"**{tl['size_description']}**: "
+                    f"{tl['total_months_min']}-{tl['total_months_max']}ヶ月"
+                )
+                if tl.get("notes"):
+                    st.caption(tl["notes"])
+
+            st.subheader("認証維持")
+            for ma in guide.get("maintenance_audits", []):
+                st.markdown(f"**{ma['audit_type']}**: {ma['frequency']}")
+                st.caption(f"範囲: {ma['scope']} / コスト: {ma['cost_factor']}")
+
+elif page == "金融業ディープガイド":
+    st.title("金融業 AIガバナンス ディープガイド")
+    st.markdown("金融業界固有のAIガバナンス要件を深く掘り下げます。")
+
+    tab1, tab2 = st.tabs(["AIリスク", "ユースケース"])
+
+    with tab1:
+        risks = api_get("/knowledge/finance/risks")
+        if risks:
+            for risk in risks:
+                with st.expander(f"[{risk['category']}] {risk['title']}"):
+                    st.markdown(f"**説明**: {risk['description']}")
+                    st.markdown("**対応アクション:**")
+                    for a in risk.get("specific_actions", []):
+                        st.markdown(f"  - {a}")
+                    if risk.get("meti_mapping"):
+                        st.caption(f"METI対応: {', '.join(risk['meti_mapping'])}")
+
+    with tab2:
+        use_cases = api_get("/knowledge/finance/use-cases")
+        if use_cases:
+            for uc in use_cases:
+                level_icon = {"high": "!!!", "medium": "!!", "low": "!"}.get(uc.get("risk_level", ""), "")
+                with st.expander(f"[{level_icon} {uc['risk_level']}] {uc['name']}"):
+                    st.markdown("**主要リスク:**")
+                    for r in uc.get("key_risks", []):
+                        st.markdown(f"  - {r}")
+                    st.markdown("**必要なコントロール:**")
+                    for c in uc.get("required_controls", []):
+                        st.markdown(f"  - {c}")
+
+elif page == "監査パッケージ":
+    st.title("監査パッケージ自動生成")
+    st.markdown("外部監査・認証審査に必要な文書をワンクリックで生成します。")
+
+    if not st.session_state.org_id:
+        st.warning("先に「組織登録」を行ってください。")
+    else:
+        tab1, tab2 = st.tabs(["ISO 42001 Stage 1", "テンプレート集"])
+
+        with tab1:
+            if st.session_state.gap_id:
+                if st.button("Stage 1 審査用パッケージを生成", type="primary"):
+                    with st.spinner("文書を生成中..."):
+                        result = api_post(
+                            f"/audit-package/iso42001-stage1?"
+                            f"organization_id={st.session_state.org_id}"
+                            f"&gap_analysis_id={st.session_state.gap_id}"
+                            f"&organization_name={st.session_state.org_name or ''}",
+                            {},
+                        )
+                    if result:
+                        st.success(f"パッケージを生成しました（{result.get('document_count', 0)}文書）")
+                        for name in result.get("document_names", []):
+                            st.markdown(f"  - {name}")
+            else:
+                st.warning("先に「ギャップ分析」を実行してください。")
+
+        with tab2:
+            st.subheader("テンプレートダウンロード")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                if st.button("内部監査チェックリスト"):
+                    result = api_get("/audit-package/internal-audit-checklist")
+                    if result:
+                        for fname, content in result.items():
+                            st.download_button(fname, content, file_name=fname, key=f"dl_audit_{fname}")
+            with col2:
+                if st.button("マネジメントレビュー議事録"):
+                    result = api_get(
+                        "/audit-package/management-review-template",
+                        params={"organization_name": st.session_state.org_name or ""},
+                    )
+                    if result:
+                        for fname, content in result.items():
+                            st.download_button(fname, content, file_name=fname, key=f"dl_mr_{fname}")
+            with col3:
+                if st.button("是正措置記録"):
+                    result = api_get("/audit-package/corrective-action-template")
+                    if result:
+                        for fname, content in result.items():
+                            st.download_button(fname, content, file_name=fname, key=f"dl_ca_{fname}")
+
+elif page == "API Key管理":
+    st.title("Public API Key管理")
+    st.markdown("外部連携用のAPI Keyを管理します。")
+
+    if not st.session_state.org_id:
+        st.warning("先に「組織登録」を行ってください。")
+    else:
+        tab1, tab2 = st.tabs(["キー一覧", "新規発行"])
+
+        with tab1:
+            keys = api_get(f"/v1/api-keys/{st.session_state.org_id}")
+            if keys:
+                for k in keys:
+                    status = "有効" if k.get("active") else "無効"
+                    st.markdown(
+                        f"**{k.get('name', '?')}** — {status} — "
+                        f"スコープ: {', '.join(k.get('scopes', []))}"
+                    )
+            else:
+                st.info("API Keyがありません。")
+
+        with tab2:
+            with st.form("api_key_form"):
+                key_name = st.text_input("キー名", placeholder="External System")
+                submitted = st.form_submit_button("発行")
+
+            if submitted:
+                result = api_post(
+                    f"/v1/api-keys?organization_id={st.session_state.org_id}&name={key_name}",
+                    {},
+                )
+                if result:
+                    st.success("API Keyを発行しました。この値は一度だけ表示されます。")
+                    st.code(result.get("api_key", ""))
+
+elif page == "Webhook管理":
+    st.title("Webhook管理")
+    st.markdown("イベント発生時に外部URLにPOST通知を送ります。")
+
+    if not st.session_state.org_id:
+        st.warning("先に「組織登録」を行ってください。")
+    else:
+        tab1, tab2 = st.tabs(["Webhook一覧", "新規登録"])
+
+        with tab1:
+            hooks = api_get(f"/v1/webhooks/{st.session_state.org_id}")
+            if hooks:
+                for h in hooks:
+                    st.markdown(
+                        f"**{h.get('url', '?')}** — "
+                        f"イベント: {', '.join(h.get('events', []))}"
+                    )
+            else:
+                st.info("Webhookがありません。")
+
+        with tab2:
+            with st.form("webhook_form"):
+                url = st.text_input("Webhook URL", placeholder="https://example.com/webhook")
+                events = st.text_input("イベント（カンマ区切り、*で全て）", value="*")
+                submitted = st.form_submit_button("登録")
+
+            if submitted and url:
+                result = api_post(
+                    f"/v1/webhooks?organization_id={st.session_state.org_id}&url={url}&events={events}",
+                    {},
+                )
+                if result:
+                    st.success("Webhookを登録しました。")
+                    st.code(f"Secret: {result.get('secret', '')}")
+
+elif page == "Citadel AI連携":
+    st.title("Citadel AI連携")
+    st.markdown("Citadel AIのモデル監視データをJPGovAIのエビデンスとしてインポートします。")
+
+    st.subheader("データマッピング")
+    mapping = api_get("/citadel/mapping")
+    if mapping:
+        st.markdown("| Citadel AI機能 | METI要件 | エビデンスとしての価値 |")
+        st.markdown("|---------------|---------|---------------------|")
+        for key, value in mapping.items():
+            meti = ", ".join(value.get("meti", []))
+            desc = value.get("description", "")
+            st.markdown(f"| {key} | {meti} | {desc} |")
+
+    st.info("Citadel AI APIの公開後、自動インポート機能が利用可能になります。")
 
 elif page == "レポート生成":
     st.title("レポート生成")
