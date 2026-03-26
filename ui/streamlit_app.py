@@ -1480,51 +1480,62 @@ def page_autofix() -> None:
         )
 
     st.markdown("")
+
+    # session_stateでAutoFix実行を管理
+    if "autofix_running" not in st.session_state:
+        st.session_state.autofix_running = False
+
     _col_l, col_center, _col_r = st.columns([1, 2, 1])
     with col_center:
-        start_clicked = st.button(
+        if st.button(
             "全て修復を開始する",
             type="primary",
             use_container_width=True,
             key="start_autofix",
-        )
+        ):
+            st.session_state.autofix_running = True
+            st.rerun()
 
-    if start_clicked:
+    # AutoFix実行中フラグがTrueなら実行
+    if st.session_state.autofix_running:
         st.markdown("---")
-        st.info("自動修復を実行中です...")
         total = len(non_compliant_gaps)
-        progress_bar = st.progress(0.0)
-        status_text = st.empty()
-        error_items: list[str] = []
+        progress_placeholder = st.empty()
+        status_placeholder = st.empty()
+
+        progress_placeholder.progress(0.0)
+        status_placeholder.info("自動修復を実行中...")
 
         engine = _get_autofix_engine()
         org_ctx = _get_org_context()
+        error_items: list[str] = []
 
         for i, g in enumerate(non_compliant_gaps):
             if g.req_id in st.session_state.autofix_results:
-                progress_bar.progress((i + 1) / total)
+                progress_placeholder.progress((i + 1) / total)
                 continue
 
-            status_text.markdown(f"**{i + 1}/{total}** 修復中: {g.title}")
+            status_placeholder.info(f"**{i + 1}/{total}** 修復中: {_html.escape(g.title)}")
             try:
                 fix_result = engine.fix_requirement(g.req_id, org_ctx)
                 st.session_state.autofix_results[g.req_id] = fix_result
             except Exception as e:
                 error_items.append(f"{g.title}: {e}")
 
-            progress_bar.progress((i + 1) / total)
+            progress_placeholder.progress((i + 1) / total)
 
+        progress_placeholder.progress(1.0)
         st.session_state.autofix_done = True
         st.session_state.autofix_errors = error_items
-        progress_bar.progress(1.0)
+        st.session_state.autofix_running = False
 
         if error_items:
-            status_text.warning(
-                f"{total - len(error_items)}/{total}件の修復が完了しました。\n"
-                f"{len(error_items)}件にエラーがありました。"
+            status_placeholder.warning(
+                f"{total - len(error_items)}/{total}件の修復が完了。"
+                f" {len(error_items)}件にエラー。"
             )
         else:
-            status_text.success(f"✅ {total}/{total}件の修復が完了しました！")
+            status_placeholder.success(f"✅ {total}/{total}件の修復が完了しました！")
 
         st.rerun()
 
