@@ -85,6 +85,7 @@ defaults = {
     "autofix_progress": 0,
     "autofix_total": 0,
     "autofix_done": False,
+    "autofix_errors": [],
     # 対応完了マーク
     "marked_complete": {},
 }
@@ -388,9 +389,9 @@ def _get_flow_stage() -> str:
     if action_needed == 0:
         return "complete"
     fixed = _count_fixed()
-    if fixed == 0:
-        return "fix"
     marked = _count_marked_complete()
+    if fixed + marked < action_needed:
+        return "fix"
     if marked < action_needed:
         return "review"
     return "complete"
@@ -618,7 +619,7 @@ def show_onboarding_assessment() -> None:
     selected = st.radio(
         "回答を選んでください",
         range(len(q.options)),
-        format_func=lambda i: q.options[i],
+        format_func=lambda i, opts=q.options: opts[i],
         index=current_answer,
         key=f"q_{q.question_id}",
         label_visibility="collapsed",
@@ -922,8 +923,8 @@ def page_dashboard() -> None:
                         actions_text = g.improvement_actions[0]
                     st.markdown(
                         f'<div class="action-card">'
-                        f'<strong>{i}. {g.title}</strong><br>'
-                        f'<span style="color:#6c757d">{actions_text}</span>'
+                        f'<strong>{i}. {_html.escape(g.title)}</strong><br>'
+                        f'<span style="color:#6c757d">{_html.escape(actions_text)}</span>'
                         f'</div>',
                         unsafe_allow_html=True,
                     )
@@ -1066,7 +1067,7 @@ def page_assessment() -> None:
     selected = st.radio(
         "回答を選んでください",
         range(len(q.options)),
-        format_func=lambda i: q.options[i],
+        format_func=lambda i, opts=q.options: opts[i],
         index=current_answer,
         key=f"q_{q.question_id}",
         label_visibility="collapsed",
@@ -1101,7 +1102,7 @@ def page_assessment() -> None:
                 st.rerun()
 
 
-def _get_autofix_engine() -> AutoFixEngine:
+def _get_autofix_engine():
     """AutoFixEngineのシングルトンを取得."""
     from app.services.autofix import AutoFixEngine as _Engine
     return _Engine()
@@ -1148,7 +1149,7 @@ def _show_autofix_result(fix_result) -> None:  # noqa: ANN001
         for i, task in enumerate(fix_result.tasks, 1):
             deps = ""
             if task.depends_on:
-                dep_names = [fix_result.tasks[d].title for d in task.depends_on if d < len(fix_result.tasks)]
+                dep_names = [fix_result.tasks[d].title for d in task.depends_on if isinstance(d, int) and 0 <= d < len(fix_result.tasks)]
                 deps = f" (前提: {', '.join(dep_names)})" if dep_names else ""
             st.markdown(
                 f"{i}. **{task.title}**{deps}\n"
@@ -1159,11 +1160,10 @@ def _show_autofix_result(fix_result) -> None:  # noqa: ANN001
     if fix_result.self_check_questions:
         st.markdown("")
         st.markdown("**対応完了のセルフチェック:**")
-        for sc in fix_result.self_check_questions:
+        for i, sc in enumerate(fix_result.self_check_questions):
             st.checkbox(
                 sc.question,
-                value=False,
-                key=f"sc_{fix_result.requirement_id}_{sc.question[:20]}",
+                key=f"sc_{fix_result.requirement_id}_{i}",
             )
 
 
@@ -1214,7 +1214,7 @@ def page_autofix() -> None:
             task_count = len(fix_result.tasks) if fix_result else 0
             st.markdown(
                 f'<div class="fix-item fix-item-done">'
-                f'&#10003; <strong>{g.title}</strong>'
+                f'&#10003; <strong>{_html.escape(g.title)}</strong>'
                 f' &mdash; {doc_count}文書, {task_count}タスク生成済み'
                 f'</div>',
                 unsafe_allow_html=True,
@@ -1304,6 +1304,7 @@ def _execute_autofix_all(gaps_to_fix: list) -> None:
         progress_bar.progress((i + 1) / total)
 
     st.session_state.autofix_done = True
+    st.session_state.autofix_errors = error_items
     progress_bar.progress(1.0)
 
     if error_items:
@@ -1386,8 +1387,8 @@ def page_gaps() -> None:
     col2.metric("注意", f"{gap.partial_count}件", help="一部対応できているが改善の余地がある項目")
     col3.metric("要対応", f"{gap.non_compliant_count}件", help="対応が必要な項目")
     total = gap.total_requirements
-    rate = gap.compliant_count / total if total > 0 else 0
-    col4.metric("対応率", f"{rate:.0%}")
+    rate = (gap.compliant_count + marked) / total if total > 0 else 0
+    col4.metric("対応率", f"{min(rate, 1.0):.0%}")
 
     st.markdown("---")
 
@@ -1467,7 +1468,7 @@ def page_gaps() -> None:
             # ステータスバッジ
             st.markdown(
                 f"<span style='background-color:{color};color:white;padding:2px 8px;"
-                f"border-radius:4px;font-size:0.85em'>{label}</span>"
+                f"border-radius:4px;font-size:0.85em'>{_html.escape(label)}</span>"
                 f" スコア: **{g.current_score:.1f}** / 4.0",
                 unsafe_allow_html=True,
             )
@@ -1619,6 +1620,10 @@ def page_chat() -> None:
                     st.error(error_msg)
                     st.session_state.chat_history.append({"role": "assistant", "content": error_msg})
 
+        # チャット履歴の上限チェック（メモリリーク防止）
+        if len(st.session_state.chat_history) > 100:
+            st.session_state.chat_history = st.session_state.chat_history[-100:]
+
     # クリアボタン（サイドバーに配置して誤操作を防止）
     if st.session_state.chat_history:
         st.markdown("")
@@ -1740,9 +1745,9 @@ def page_settings() -> None:
                 }.get(s.risk_level.value, "#6c757d")
 
                 st.markdown(
-                    f"**{s.name}** "
+                    f"**{_html.escape(s.name)}** "
                     f"<span style='background-color:{risk_color};color:white;padding:2px 8px;"
-                    f"border-radius:4px;font-size:0.8em'>{risk_label}</span>",
+                    f"border-radius:4px;font-size:0.8em'>{_html.escape(risk_label)}</span>",
                     unsafe_allow_html=True,
                 )
         else:
