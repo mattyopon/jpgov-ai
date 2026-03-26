@@ -1054,13 +1054,45 @@ def page_dashboard() -> None:
                     actions_text = ""
                     if g.improvement_actions:
                         actions_text = g.improvement_actions[0]
-                    st.markdown(
-                        f'<div class="action-card">'
-                        f'<strong>{i}. {_html.escape(g.title)}</strong><br>'
-                        f'<span style="color:#6c757d">{_html.escape(actions_text)}</span>'
-                        f'</div>',
-                        unsafe_allow_html=True,
-                    )
+
+                    # 既にAutoFix済みかチェック
+                    is_fixed = g.req_id in st.session_state.autofix_results
+
+                    if is_fixed:
+                        st.markdown(
+                            f'<div class="action-card" style="border-left:4px solid #22c55e">'
+                            f'<strong>✅ {i}. {_html.escape(g.title)}</strong><br>'
+                            f'<span style="color:#22c55e">文書を生成済みです。確認・承認してください。</span>'
+                            f'</div>',
+                            unsafe_allow_html=True,
+                        )
+                        if st.button("生成された文書を確認する", key=f"dash_review_{g.req_id}"):
+                            st.session_state.current_page = "page_gaps"
+                            st.rerun()
+                    else:
+                        st.markdown(
+                            f'<div class="action-card">'
+                            f'<strong>{i}. {_html.escape(g.title)}</strong><br>'
+                            f'<span style="color:#6c757d">{_html.escape(actions_text)}</span>'
+                            f'</div>',
+                            unsafe_allow_html=True,
+                        )
+                        if st.button("📝 この文書を自動生成する", key=f"dash_fix_{g.req_id}", type="primary"):
+                            try:
+                                engine = _get_autofix_engine()
+                                org_ctx = _get_org_context()
+                                fix_result = engine.fix_requirement(g.req_id, org_ctx)
+                                st.session_state.autofix_results[g.req_id] = fix_result
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"生成に失敗しました: {e}")
+
+                # 全件一括ボタン
+                st.markdown("")
+                if st.button("🔧 全28項目をまとめて自動生成する", key="dash_fix_all"):
+                    st.session_state.autofix_running = True
+                    st.session_state.current_page = "page_autofix"
+                    st.rerun()
             else:
                 st.success("すべての項目に対応済みです。")
 
