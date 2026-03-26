@@ -1,0 +1,16 @@
+[theme]
+# JPGovAI — Professional SaaS Theme
+# Vanta/Drata風のクリーンなデザイン
+
+primaryColor = "#2563eb"           # 青（メインアクション）
+backgroundColor = "#ffffff"         # 白（背景）
+secondaryBackgroundColor = "#f8fafc" # 薄いグレー（セカンダリ背景）
+textColor = "#0f172a"              # ダークネイビー（テキスト）
+font = "sans serif"
+
+[server]
+headless = true
+enableCORS = false
+
+[browser]
+gatherUsageStats = false

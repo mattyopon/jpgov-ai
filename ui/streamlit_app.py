@@ -30,6 +30,108 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# ── プロフェッショナルCSS ─────────────────────────────────────────
+st.markdown("""
+<style>
+/* Vanta/Drata風のクリーンSaaSデザイン */
+
+/* フォント */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+html, body, [class*="st-"] { font-family: 'Inter', sans-serif !important; }
+
+/* サイドバー */
+section[data-testid="stSidebar"] {
+    background-color: #0f172a !important;
+    border-right: 1px solid #1e293b;
+}
+section[data-testid="stSidebar"] * {
+    color: #e2e8f0 !important;
+}
+section[data-testid="stSidebar"] .stRadio label:hover {
+    background-color: #1e293b !important;
+    border-radius: 8px;
+}
+
+/* メインコンテンツ */
+.main .block-container {
+    padding: 2rem 3rem !important;
+    max-width: 1200px !important;
+}
+
+/* ボタン */
+.stButton > button[kind="primary"] {
+    background-color: #2563eb !important;
+    border: none !important;
+    border-radius: 8px !important;
+    padding: 0.5rem 1.5rem !important;
+    font-weight: 600 !important;
+    transition: all 0.2s !important;
+}
+.stButton > button[kind="primary"]:hover {
+    background-color: #1d4ed8 !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3) !important;
+}
+.stButton > button[kind="secondary"], .stButton > button:not([kind]) {
+    border-radius: 8px !important;
+    border: 1px solid #e2e8f0 !important;
+    font-weight: 500 !important;
+}
+
+/* メトリクスカード */
+[data-testid="stMetric"] {
+    background-color: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 1rem;
+}
+[data-testid="stMetricLabel"] { font-weight: 600 !important; color: #64748b !important; }
+[data-testid="stMetricValue"] { font-size: 2rem !important; font-weight: 700 !important; }
+
+/* Expander */
+.streamlit-expanderHeader {
+    border-radius: 8px !important;
+    font-weight: 600 !important;
+}
+
+/* プログレスバー */
+.stProgress > div > div {
+    background-color: #2563eb !important;
+    border-radius: 999px !important;
+}
+
+/* ヘッダー */
+h1 { font-weight: 800 !important; letter-spacing: -0.02em !important; }
+h2 { font-weight: 700 !important; color: #0f172a !important; }
+h3 { font-weight: 600 !important; }
+
+/* タブ */
+.stTabs [data-baseweb="tab-list"] { gap: 0 !important; }
+.stTabs [data-baseweb="tab"] {
+    border-radius: 8px 8px 0 0 !important;
+    font-weight: 500 !important;
+}
+
+/* ダウンロードボタン */
+.stDownloadButton > button {
+    border-radius: 8px !important;
+    border: 1px solid #2563eb !important;
+    color: #2563eb !important;
+    font-weight: 600 !important;
+}
+
+/* ラジオボタン */
+.stRadio > div { gap: 0.25rem !important; }
+
+/* 成功/警告/エラーメッセージ */
+.stAlert { border-radius: 8px !important; }
+
+/* フッター非表示 */
+footer { display: none !important; }
+#MainMenu { display: none !important; }
+</style>
+""", unsafe_allow_html=True)
+
 # ── DB初期化 ──────────────────────────────────────────────────────
 from app.db.database import get_db
 
@@ -1379,8 +1481,6 @@ def page_gaps() -> None:
         return
 
     # サマリー
-    action_needed = _count_action_needed(gap)
-    fixed = _count_fixed()
     marked = _count_marked_complete()
 
     col1, col2, col3, col4 = st.columns(4)
@@ -1458,7 +1558,6 @@ def page_gaps() -> None:
         is_marked = st.session_state.marked_complete.get(g.req_id, False)
 
         # タイトルに対応完了マーク
-        title_prefix = "&#10003; " if is_marked else ""
         title_suffix = " [対応完了]" if is_marked else ""
 
         with st.expander(
