@@ -1482,14 +1482,51 @@ def page_autofix() -> None:
     st.markdown("")
     _col_l, col_center, _col_r = st.columns([1, 2, 1])
     with col_center:
-        if st.button(
+        start_clicked = st.button(
             "全て修復を開始する",
             type="primary",
             use_container_width=True,
             key="start_autofix",
-        ):
-            _execute_autofix_all(non_compliant_gaps)
-            st.rerun()
+        )
+
+    if start_clicked:
+        st.markdown("---")
+        st.info("自動修復を実行中です...")
+        total = len(non_compliant_gaps)
+        progress_bar = st.progress(0.0)
+        status_text = st.empty()
+        error_items: list[str] = []
+
+        engine = _get_autofix_engine()
+        org_ctx = _get_org_context()
+
+        for i, g in enumerate(non_compliant_gaps):
+            if g.req_id in st.session_state.autofix_results:
+                progress_bar.progress((i + 1) / total)
+                continue
+
+            status_text.markdown(f"**{i + 1}/{total}** 修復中: {g.title}")
+            try:
+                fix_result = engine.fix_requirement(g.req_id, org_ctx)
+                st.session_state.autofix_results[g.req_id] = fix_result
+            except Exception as e:
+                error_items.append(f"{g.title}: {e}")
+
+            progress_bar.progress((i + 1) / total)
+
+        st.session_state.autofix_done = True
+        st.session_state.autofix_errors = error_items
+        progress_bar.progress(1.0)
+
+        if error_items:
+            status_text.warning(
+                f"{total - len(error_items)}/{total}件の修復が完了しました。\n"
+                f"{len(error_items)}件にエラーがありました。"
+            )
+        else:
+            status_text.success(f"✅ {total}/{total}件の修復が完了しました！")
+
+        st.rerun()
 
 
 def _execute_autofix_all(gaps_to_fix: list) -> None:
