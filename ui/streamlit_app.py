@@ -1221,12 +1221,14 @@ def _get_org_context() -> dict[str, str]:
 
 
 def _show_autofix_result(fix_result) -> None:  # noqa: ANN001
-    """AutoFix結果を表示."""
+    """AutoFix結果を表示（プレビュー・編集・承認UI付き）."""
+    from app.models import DocumentStatus as _DS
+
     # 生成された文書
     if fix_result.generated_documents:
         st.markdown("---")
         st.markdown("**生成された文書:**")
-        for doc in fix_result.generated_documents:
+        for doc_idx, doc in enumerate(fix_result.generated_documents):
             doc_type_label = {
                 "policy": "方針書",
                 "checklist": "チェックリスト",
@@ -1234,16 +1236,84 @@ def _show_autofix_result(fix_result) -> None:  # noqa: ANN001
                 "procedure": "手順書",
             }.get(doc.doc_type, doc.doc_type)
 
-            with st.expander(f"{doc_type_label}: {doc.title}", expanded=False):
-                st.markdown(doc.content)
-                st.download_button(
-                    label=f"{doc.title} をダウンロード",
-                    data=doc.content,
-                    file_name=f"{doc.title}.md",
-                    mime="text/markdown",
-                    key=f"dl_{fix_result.requirement_id}_{doc.id}",
-                )
-                st.caption("ステータス: ドラフト（確認・編集後に正式版としてご利用ください）")
+            status_badge = ""
+            if doc.status == _DS.APPROVED:
+                status_badge = " [承認済み]"
+            else:
+                status_badge = " [ドラフト]"
+
+            with st.expander(
+                f"{doc_type_label}: {doc.title}{status_badge}",
+                expanded=False,
+            ):
+                # 編集モードのキー
+                edit_key = f"edit_mode_{fix_result.requirement_id}_{doc_idx}"
+                text_key = f"edit_text_{fix_result.requirement_id}_{doc_idx}"
+
+                if st.session_state.get(edit_key, False):
+                    # 編集モード
+                    edited = st.text_area(
+                        "文書を編集",
+                        value=doc.content,
+                        height=400,
+                        key=text_key,
+                    )
+                    col_save, col_cancel = st.columns(2)
+                    with col_save:
+                        if st.button(
+                            "保存",
+                            key=f"save_{fix_result.requirement_id}_{doc_idx}",
+                            type="primary",
+                        ):
+                            doc.content = edited
+                            st.session_state[edit_key] = False
+                            st.rerun()
+                    with col_cancel:
+                        if st.button(
+                            "キャンセル",
+                            key=f"cancel_{fix_result.requirement_id}_{doc_idx}",
+                        ):
+                            st.session_state[edit_key] = False
+                            st.rerun()
+                else:
+                    # プレビューモード
+                    st.markdown(doc.content)
+
+                    col_edit, col_approve, col_dl = st.columns(3)
+                    with col_edit:
+                        if doc.status != _DS.APPROVED:
+                            if st.button(
+                                "編集する",
+                                key=f"btn_edit_{fix_result.requirement_id}_{doc_idx}",
+                            ):
+                                st.session_state[edit_key] = True
+                                st.rerun()
+                    with col_approve:
+                        if doc.status != _DS.APPROVED:
+                            if st.button(
+                                "承認する",
+                                key=f"btn_approve_{fix_result.requirement_id}_{doc_idx}",
+                                type="primary",
+                            ):
+                                doc.status = _DS.APPROVED
+                                # 全文書承認済みならresultも完了に
+                                all_approved = all(
+                                    d.status == _DS.APPROVED
+                                    for d in fix_result.generated_documents
+                                )
+                                if all_approved:
+                                    fix_result.status = "completed"
+                                st.rerun()
+                        else:
+                            st.success("承認済み")
+                    with col_dl:
+                        st.download_button(
+                            label="ダウンロード",
+                            data=doc.content,
+                            file_name=f"{doc.title}.md",
+                            mime="text/markdown",
+                            key=f"dl_{fix_result.requirement_id}_{doc.id}",
+                        )
 
     # タスクリスト
     if fix_result.tasks:

@@ -6,6 +6,10 @@
 診断で「要対応」と出た項目に対して、必要なポリシー文書・チェックリスト・
 エビデンステンプレート・タスクリスト・セルフチェック質問を自動生成する。
 
+v2: policy_templates.py の実用的な雛形文書を使用。
+    文書に status フィールド（draft → review → approved）を追加。
+    承認すると該当要件のスコアが自動更新される。
+
 Anthropic APIキーがない場合はテンプレートベースの文書生成（穴埋め方式）。
 APIキーがある場合はClaude APIで組織の状況に合わせた文書をカスタム生成。
 """
@@ -19,12 +23,14 @@ from app.knowledge.autofix_definitions import (
     AutoFixDefinition,
     get_autofix_definition,
 )
+from app.knowledge.policy_templates import get_policy_template
 from app.guidelines.meti_v1_1 import get_requirement
 from app.models import (
     AutoFixResult,
     AutoFixTask,
     ChecklistItem,
     ComplianceStatus,
+    DocumentStatus,
     GeneratedDocument,
     RequirementGap,
     SelfCheckItem,
@@ -52,6 +58,8 @@ class AutoFixEngine:
             org_context = {}
 
         org_name = org_context.get("org_name", "貴社")
+        industry = org_context.get("industry", "")
+        ai_usage = org_context.get("ai_usage", "")
         date_str = datetime.now(timezone.utc).strftime("%Y年%m月%d日")
 
         # 要件情報を取得
@@ -65,8 +73,15 @@ class AutoFixEngine:
             # 定義がない要件には汎用的なAutoFixを返す
             return self._generate_generic_fix(requirement_id, req_title, org_name, date_str)
 
-        # テンプレートベースの文書生成（APIキーの有無にかかわらず、まずテンプレート版を作成）
-        documents = self._generate_documents_from_template(defn, org_name, date_str)
+        # 1) 実用的雛形文書（policy_templates.py）を優先して生成
+        policy_template = get_policy_template(requirement_id)
+        if policy_template:
+            documents = self._generate_from_policy_template(
+                requirement_id, policy_template, defn, org_name, date_str, industry, ai_usage,
+            )
+        else:
+            # フォールバック: autofix_definitions.py のテンプレートを使用
+            documents = self._generate_documents_from_template(defn, org_name, date_str)
 
         # APIキーがある場合はAI生成版で上書き
         api_key = os.environ.get("ANTHROPIC_API_KEY", "")
@@ -134,6 +149,51 @@ class AutoFixEngine:
             result = self.fix_requirement(gap.req_id, org_context)
             results.append(result)
         return results
+
+    def approve_document(
+        self,
+        result: AutoFixResult,
+        document_index: int = 0,
+    ) -> AutoFixResult:
+        """文書を承認し、ステータスを更新する.
+
+        Args:
+            result: AutoFixResult
+            document_index: 承認する文書のインデックス
+
+        Returns:
+            更新された AutoFixResult
+        """
+        if 0 <= document_index < len(result.generated_documents):
+            doc = result.generated_documents[document_index]
+            doc.status = DocumentStatus.APPROVED
+
+        # 全文書が承認済みなら result の status を completed に更新
+        all_approved = all(
+            d.status == DocumentStatus.APPROVED
+            for d in result.generated_documents
+        )
+        if all_approved:
+            result.status = "completed"
+
+        return result
+
+    def approve_all_documents(
+        self,
+        result: AutoFixResult,
+    ) -> AutoFixResult:
+        """全文書を一括承認する.
+
+        Args:
+            result: AutoFixResult
+
+        Returns:
+            更新された AutoFixResult
+        """
+        for doc in result.generated_documents:
+            doc.status = DocumentStatus.APPROVED
+        result.status = "completed"
+        return result
 
     def generate_policy_document(
         self,
@@ -217,6 +277,59 @@ class AutoFixEngine:
         return result.tasks
 
     # ── 内部メソッド ──
+
+    def _generate_from_policy_template(
+        self,
+        requirement_id: str,
+        policy_template: str,
+        defn: AutoFixDefinition,
+        org_name: str,
+        date_str: str,
+        industry: str,
+        ai_usage: str,
+    ) -> list[GeneratedDocument]:
+        """実用的雛形文書（policy_templates.py）から文書を生成.
+
+        雛形文書を主文書として生成し、autofix_definitions の補助文書も含める。
+        """
+        # プレースホルダを置換
+        content = policy_template.format(
+            org_name=org_name,
+            date=date_str,
+            industry=industry or "（業種未設定）",
+            ai_usage=ai_usage or "（AI利用状況未設定）",
+        )
+
+        # 主文書のタイトルとdoc_typeを判定
+        primary_title = defn.documents[0].title if defn.documents else f"{requirement_id} 対応文書"
+        primary_doc_type = defn.documents[0].doc_type if defn.documents else "policy"
+
+        documents: list[GeneratedDocument] = [
+            GeneratedDocument(
+                title=primary_title,
+                content=content,
+                doc_type=primary_doc_type,
+                status=DocumentStatus.DRAFT,
+            ),
+        ]
+
+        # autofix_definitions の補助文書（2番目以降）も追加
+        if len(defn.documents) > 1:
+            for doc_def in defn.documents[1:]:
+                aux_content = doc_def.template.format(
+                    org_name=org_name,
+                    date=date_str,
+                )
+                documents.append(
+                    GeneratedDocument(
+                        title=doc_def.title,
+                        content=aux_content,
+                        doc_type=doc_def.doc_type,
+                        status=DocumentStatus.DRAFT,
+                    )
+                )
+
+        return documents
 
     def _generate_documents_from_template(
         self,
