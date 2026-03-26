@@ -44,7 +44,7 @@ section[data-testid="stSidebar"] {
     background-color: #0f172a !important;
     border-right: 1px solid #1e293b;
 }
-section[data-testid="stSidebar"] * {
+section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] * {
     color: #e2e8f0 !important;
 }
 section[data-testid="stSidebar"] .stRadio label:hover {
@@ -191,6 +191,8 @@ defaults = {
     "autofix_errors": [],
     # 対応完了マーク
     "marked_complete": {},
+    # 明示的に回答済みの質問IDセット
+    "confirmed_answers": set(),
 }
 for k, v in defaults.items():
     if k not in st.session_state:
@@ -692,17 +694,17 @@ def show_onboarding_assessment() -> None:
     total_q = len(questions)
     step = st.session_state.assessment_step
 
+    if step >= total_q:
+        # 全問回答済み → 結果算出（Step 2ヘッダーを表示せずにStep 3へ）
+        _run_assessment_and_show_result()
+        return
+
     st.markdown("### Step 2 / 3: 診断")
 
     # プログレスバー
     progress_ratio = step / total_q
     st.progress(progress_ratio)
     st.caption(f"{step} / {total_q} 問回答済み")
-
-    if step >= total_q:
-        # 全問回答済み → 結果算出
-        _run_assessment_and_show_result()
-        return
 
     q = questions[step]
 
@@ -719,6 +721,7 @@ def show_onboarding_assessment() -> None:
         st.markdown(f'<div class="question-help">{help_text}</div>', unsafe_allow_html=True)
 
     current_answer = st.session_state.assessment_answers.get(q.question_id, 0)
+    is_confirmed = q.question_id in st.session_state.confirmed_answers
     selected = st.radio(
         "回答を選んでください",
         range(len(q.options)),
@@ -727,6 +730,9 @@ def show_onboarding_assessment() -> None:
         key=f"q_{q.question_id}",
         label_visibility="collapsed",
     )
+    # ラジオ選択が変わったら確認済みとみなす
+    if selected != current_answer or is_confirmed:
+        st.session_state.confirmed_answers.add(q.question_id)
     st.session_state.assessment_answers[q.question_id] = selected
 
     # ナビゲーション
@@ -749,12 +755,20 @@ def show_onboarding_assessment() -> None:
     with col_next:
         if step < total_q - 1:
             if st.button("次の質問へ", type="primary"):
-                st.session_state.assessment_step = step + 1
-                st.rerun()
+                if q.question_id not in st.session_state.confirmed_answers:
+                    st.warning("回答を選択してください。現在の選択肢でよければ、もう一度ボタンを押してください。")
+                    st.session_state.confirmed_answers.add(q.question_id)
+                else:
+                    st.session_state.assessment_step = step + 1
+                    st.rerun()
         else:
             if st.button("回答を完了する", type="primary"):
-                st.session_state.assessment_step = total_q
-                st.rerun()
+                if q.question_id not in st.session_state.confirmed_answers:
+                    st.warning("回答を選択してください。現在の選択肢でよければ、もう一度ボタンを押してください。")
+                    st.session_state.confirmed_answers.add(q.question_id)
+                else:
+                    st.session_state.assessment_step = total_q
+                    st.rerun()
 
 
 def _run_assessment_and_show_result() -> None:
@@ -808,13 +822,21 @@ def _run_assessment_and_show_result() -> None:
         col2.metric("注意", f"{gap.partial_count}件", help="一部対応できているが改善の余地がある項目")
         col3.metric("要対応", f"{gap.non_compliant_count}件", help="対応が必要な項目")
 
-        # 要対応がある場合は大きな修復ボタンを表示
+        # 要対応・注意がある場合は大きな修復ボタンを表示
         action_needed = _count_action_needed(gap)
         if action_needed > 0:
+            nc = gap.non_compliant_count
+            pc = gap.partial_count
+            if nc > 0 and pc > 0:
+                cta_text = f"要対応: {nc}件、注意: {pc}件"
+            elif nc > 0:
+                cta_text = f"{nc}件が要対応です"
+            else:
+                cta_text = f"{pc}件に改善の余地があります"
             st.markdown("")
             st.markdown(
                 f'<div class="cta-box">'
-                f'<h2>{action_needed}項目が要対応です</h2>'
+                f'<h2>{cta_text}</h2>'
                 f'<p>ワンクリックで必要な文書・チェックリスト・タスクを自動生成します</p>'
                 f'</div>',
                 unsafe_allow_html=True,
@@ -961,9 +983,17 @@ def page_dashboard() -> None:
             )
         elif stage == "fix" and action_needed > 0:
             # 診断後・修復前
+            nc = gap.non_compliant_count
+            pc = gap.partial_count
+            if nc > 0 and pc > 0:
+                cta_text = f"要対応: {nc}件、注意: {pc}件"
+            elif nc > 0:
+                cta_text = f"{nc}件が要対応です"
+            else:
+                cta_text = f"{pc}件に改善の余地があります"
             st.markdown(
                 f'<div class="cta-box">'
-                f'<h2>{action_needed}項目が要対応です</h2>'
+                f'<h2>{cta_text}</h2>'
                 f'<p>ワンクリックで必要な文書・チェックリスト・タスクを自動生成します</p>'
                 f'</div>',
                 unsafe_allow_html=True,
@@ -1167,6 +1197,7 @@ def page_assessment() -> None:
 
     # 回答選択
     current_answer = st.session_state.assessment_answers.get(q.question_id, 0)
+    is_confirmed = q.question_id in st.session_state.confirmed_answers
     selected = st.radio(
         "回答を選んでください",
         range(len(q.options)),
@@ -1175,6 +1206,8 @@ def page_assessment() -> None:
         key=f"q_{q.question_id}",
         label_visibility="collapsed",
     )
+    if selected != current_answer or is_confirmed:
+        st.session_state.confirmed_answers.add(q.question_id)
     st.session_state.assessment_answers[q.question_id] = selected
 
     # ナビゲーション
@@ -1197,12 +1230,20 @@ def page_assessment() -> None:
     with col_next:
         if step < total_q - 1:
             if st.button("次の質問へ", type="primary"):
-                st.session_state.assessment_step = step + 1
-                st.rerun()
+                if q.question_id not in st.session_state.confirmed_answers:
+                    st.warning("回答を選択してください。現在の選択肢でよければ、もう一度ボタンを押してください。")
+                    st.session_state.confirmed_answers.add(q.question_id)
+                else:
+                    st.session_state.assessment_step = step + 1
+                    st.rerun()
         else:
             if st.button("回答を完了する", type="primary"):
-                st.session_state.assessment_step = total_q
-                st.rerun()
+                if q.question_id not in st.session_state.confirmed_answers:
+                    st.warning("回答を選択してください。現在の選択肢でよければ、もう一度ボタンを押してください。")
+                    st.session_state.confirmed_answers.add(q.question_id)
+                else:
+                    st.session_state.assessment_step = total_q
+                    st.rerun()
 
 
 def _get_autofix_engine():
@@ -1598,12 +1639,12 @@ def page_gaps() -> None:
 
     st.markdown("")
 
-    # フィルタ（デフォルトは「要対応」を最初に見せる）
+    # フィルタ（デフォルトは全表示。空結果を防ぐ）
     status_filter = st.selectbox(
         "表示する項目を絞り込む",
-        ["要対応のみ", "注意のみ", "OKのみ", "すべて表示"],
+        ["すべて表示", "要対応のみ", "注意のみ", "OKのみ"],
         index=0,
-        help="ステータスで項目を絞り込めます。まずは「要対応」から確認するのがおすすめです。",
+        help="ステータスで項目を絞り込めます。",
     )
 
     # フィルタ適用
